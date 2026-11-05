@@ -37,6 +37,7 @@ C:\Scripts\
 ├── launcher\DockerCompact.cs     # mã nguồn DockerCompact.exe (icon app + trình khởi chạy)
 ├── installer\DockerCompact.iss   # script Inno Setup (Setup.exe)
 ├── build.ps1                     # build DockerCompact.exe và Setup.exe
+├── VERSION                       # số phiên bản, build.ps1 và workflow đọc từ đây
 ├── assets\images\                # icon app và ảnh chụp
 ├── .github\workflows\release.yml # build Setup.exe và đăng lên GitHub Release
 └── logs\                         # tự tạo
@@ -61,22 +62,17 @@ Tác vụ hàng tuần chạy dưới tài khoản đã đăng ký nó, và file
 
 ### Build bản phát hành
 
-`.github/workflows/release.yml` chạy `build.ps1` trên GitHub Actions:
+Code được phát triển trên nhánh `dev`; nhánh `main` chỉ nhận các bản phát hành. `.github/workflows/release.yml` chạy `build.ps1` trên GitHub Actions **chỉ khi một pull request từ `dev` được merge vào `main`**:
 
-```bash
-git tag v1.0.0
-```
+1. Trên `dev`, ghi phiên bản mới vào file `VERSION` (ví dụ `1.1.1`), commit rồi push.
+2. Mở pull request `dev` → `main` rồi merge.
 
-```bash
-git push origin v1.0.0
-```
+Sau đó workflow kiểm tra cú pháp các script và file chữ giao diện, build `DockerCompact.exe` kèm icon app, build `dist\DockerCompact-Setup-<VERSION>.exe` cùng file `.sha256`, tạo tag `v<VERSION>` trên commit merge, rồi đăng cả hai file lên GitHub Release. Nếu tag đó đã có, build sẽ dừng để không ghi đè bản cũ: tăng `VERSION` rồi merge lại. Push lên nhánh nào, hay đóng pull request mà không merge, đều không build. Chạy workflow thủ công (**Actions → Build installer → Run workflow**) thì chỉ tạo artifact để tải về.
 
-Khi push một tag dạng `v*.*.*`, workflow kiểm tra cú pháp các script và file chữ giao diện, build `DockerCompact.exe` kèm icon app, build `dist\DockerCompact-Setup-1.0.0.exe` cùng file `.sha256`, rồi đăng cả hai lên GitHub Release. Chạy workflow thủ công (**Actions → Build installer → Run workflow**) thì chỉ tạo artifact để tải về.
-
-Build trên máy: cài [Inno Setup 6](https://jrsoftware.org/isdl.php) rồi chạy:
+Build trên máy: cài [Inno Setup 6](https://jrsoftware.org/isdl.php) rồi chạy (phiên bản lấy từ `VERSION`; thêm `-Version 1.2.3` để ghi đè):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Version 1.0.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 Nếu chưa có Inno Setup, thêm `-SkipInstaller` để chỉ build `dist\DockerCompact.exe`. Wizard của bộ cài là tiếng Anh vì Inno Setup không có bản dịch tiếng Việt chính thức.

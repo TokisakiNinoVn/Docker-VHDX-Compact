@@ -37,6 +37,7 @@ C:\Scripts\
 ├── launcher\DockerCompact.cs     # source of DockerCompact.exe (app icon + launcher)
 ├── installer\DockerCompact.iss   # Inno Setup script (Setup.exe)
 ├── build.ps1                     # builds DockerCompact.exe and Setup.exe
+├── VERSION                       # release version, read by build.ps1 and the workflow
 ├── assets\images\                # app icon and screenshots
 ├── .github\workflows\release.yml # builds Setup.exe and publishes a Release
 └── logs\                         # created automatically
@@ -61,22 +62,17 @@ The weekly task runs as the account that registered it, and the VHDX lives in th
 
 ### Building a release
 
-`.github/workflows/release.yml` runs `build.ps1` on GitHub Actions:
+Work happens on the `dev` branch; `main` only receives releases. `.github/workflows/release.yml` runs `build.ps1` on GitHub Actions **only when a pull request from `dev` is merged into `main`**:
 
-```bash
-git tag v1.0.0
-```
+1. On `dev`, set the new version in the `VERSION` file (e.g. `1.1.1`), commit and push.
+2. Open a pull request `dev` → `main` and merge it.
 
-```bash
-git push origin v1.0.0
-```
+The workflow then checks the scripts' syntax and the UI strings, compiles `DockerCompact.exe` with the app icon, builds `dist\DockerCompact-Setup-<VERSION>.exe` plus a `.sha256` file, creates the tag `v<VERSION>` on the merge commit, and publishes both files to a GitHub Release. If that tag already exists, the build stops so an old release is never overwritten: bump `VERSION` and merge again. Pushes to either branch, and pull requests that are closed without merging, build nothing. Running the workflow by hand (**Actions → Build installer → Run workflow**) only produces a downloadable artifact.
 
-Pushing a `v*.*.*` tag checks the scripts' syntax and the UI strings, compiles `DockerCompact.exe` with the app icon, builds `dist\DockerCompact-Setup-1.0.0.exe` plus a `.sha256` file, and publishes both to a GitHub Release. Running the workflow by hand (**Actions → Build installer → Run workflow**) only produces a downloadable artifact.
-
-To build locally, install [Inno Setup 6](https://jrsoftware.org/isdl.php) and run:
+To build locally, install [Inno Setup 6](https://jrsoftware.org/isdl.php) and run (the version comes from `VERSION`; `-Version 1.2.3` overrides it):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Version 1.0.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 Without Inno Setup, `-SkipInstaller` builds only `dist\DockerCompact.exe`. The installer wizard itself is in English, because Inno Setup ships no official Vietnamese translation.

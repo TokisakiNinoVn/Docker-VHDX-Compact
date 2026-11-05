@@ -1,34 +1,55 @@
 name: Build installer
 
+# Releases are built only when a pull request from "dev" is merged into
+# "main". The version comes from the VERSION file; bump it on dev before
+# merging. The workflow then creates the tag v<VERSION> and the Release.
 on:
-  push:
-    tags: ["v*.*.*"]      # e.g. git tag v1.0.0 && git push nino v1.0.0
+  pull_request:
+    types: [closed]
+    branches: [main]
   workflow_dispatch:       # manual test build (artifact only, no release)
 
 permissions:
-  contents: write          # needed to create the GitHub Release
+  contents: write          # needed to create the tag and the GitHub Release
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.head.ref == 'dev' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: windows-latest
     defaults:
       run:
         shell: powershell  # Windows PowerShell 5.1, same as the tool's target
+    env:
+      IS_RELEASE: ${{ github.event_name == 'pull_request' }}
+      # For a merged PR, build exactly the merge commit that landed on main.
+      BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BUILD_SHA }}
 
       - name: Work out version
         id: ver
         run: |
-          if ("${{ github.ref_type }}" -eq "tag") {
-            $v = "${{ github.ref_name }}".TrimStart("v")
-          } else {
-            $v = "0.0.${{ github.run_number }}"
+          $v = (Get-Content VERSION -Raw).Trim()
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "VERSION must look like 1.2.3 (got '$v')." }
+          if ($env:IS_RELEASE -eq "true") {
+            git ls-remote --exit-code --tags origin "refs/tags/v$v" *> $null
+            if ($LASTEXITCODE -eq 0) {
+              throw "Tag v$v already exists. Bump VERSION on dev and merge again."
+            }
           }
-          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Tag must look like v1.2.3 (got '$v')." }
           "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "Version: $v"
+          "Version: $v (release: $env:IS_RELEASE)"
 
       - name: Install Inno Setup (if missing)
         run: |
@@ -54,16 +75,11 @@ jobs:
           path: dist/DockerCompact-Setup-*
 
       - name: Publish GitHub Release
-        if: github.ref_type == 'tag'
+        if: env.IS_RELEASE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "v${{ steps.ver.outputs.version }}"
           $files = @(Get-ChildItem dist\DockerCompact-Setup-* | ForEach-Object { $_.FullName })
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag @files --clobber
-          } else {
-            gh release create $tag @files --title "Docker VHDX Compact $tag" --generate-notes
-          }
+          gh release create $tag @files --target $env:BUILD_SHA --title "Docker VHDX Compact $tag" --generate-notes
           if ($LASTEXITCODE -ne 0) { throw "gh release failed." }
