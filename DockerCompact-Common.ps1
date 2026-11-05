@@ -26,6 +26,13 @@ $script:DcVhdxPath    = $script:DcVhdxDefault
 $script:DcLangPath    = Join-Path $script:DcRoot "DockerCompact-Lang.json"
 $script:DcSettingsPath = Join-Path $env:APPDATA "DockerCompact\settings.json"
 
+# App version from the VERSION file (shipped next to the scripts).
+$script:DcVersion = ""
+$verFile = Join-Path $script:DcRoot "VERSION"
+if (Test-Path -LiteralPath $verFile -PathType Leaf) {
+    $script:DcVersion = ((Get-Content -LiteralPath $verFile -Raw) -replace '\s', '')
+}
+
 # App icon: installed copy next to the scripts, or the repo's assets folder.
 $script:DcIconPath = @(
     (Join-Path $script:DcRoot "DockerCompact.ico"),

@@ -60,6 +60,7 @@ Source: "..\dist\DockerCompact.exe";                DestDir: "{app}"; Flags: ign
 Source: "..\assets\images\icon-no-background.ico"; DestDir: "{app}"; DestName: "DockerCompact.ico"; Flags: ignoreversion
 Source: "..\DockerCompact-UI.ps1";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DockerCompact-Lang.json";               DestDir: "{app}"; Flags: ignoreversion
+Source: "..\VERSION";                              DestDir: "{app}"; Flags: ignoreversion
 Source: "..\docker-compact.ps1";                    DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DockerCompact-AutoSetup.ps1";           DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DockerCompact-Common.ps1";              DestDir: "{app}"; Flags: ignoreversion
@@ -69,10 +70,10 @@ Source: "..\docs\VIE.md";                           DestDir: "{app}"; DestName: 
 Source: "..\LICENSE";                               DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Comment: "Compact the Docker Desktop WSL2 disk"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Comment: "Compact the Docker Desktop WSL2 disk"; AppUserModelID: "TokisakiNino.DockerVhdxCompact"
 Name: "{group}\{cm:Logs}"; Filename: "{commonappdata}\DockerCompact\logs"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Comment: "Compact the Docker Desktop WSL2 disk"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Comment: "Compact the Docker Desktop WSL2 disk"; AppUserModelID: "TokisakiNino.DockerVhdxCompact"; Tasks: desktopicon
 
 [Dirs]
 Name: "{commonappdata}\DockerCompact\logs"
