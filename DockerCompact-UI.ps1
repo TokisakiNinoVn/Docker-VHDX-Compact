@@ -98,6 +98,17 @@ if (-not ("DockerCompact.Dpi" -as [type])) {
 "@
 }
 [void][DockerCompact.Dpi]::SetProcessDPIAware()
+
+# The window lives in powershell.exe, so by default the taskbar groups it
+# with PowerShell and shows PowerShell's icon. A process-wide AppUserModelID
+# gives the app its own taskbar button, which then uses the form's icon.
+if (-not ("DockerCompact.Shell" -as [type])) {
+    Add-Type -Namespace DockerCompact -Name Shell -MemberDefinition @"
+[DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+public static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
+"@
+}
+try { [void][DockerCompact.Shell]::SetCurrentProcessExplicitAppUserModelID("TokisakiNino.DockerVhdxCompact") } catch { }
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 
@@ -159,7 +170,7 @@ $form = New-Object Windows.Forms.Form
 $form.SuspendLayout()
 $form.AutoScaleDimensions = New-Object Drawing.SizeF(96, 96)
 $form.AutoScaleMode = "Dpi"
-$form.Text = "Docker VHDX Compact"
+$form.Text = if ($script:DcVersion) { "Docker VHDX Compact v$script:DcVersion" } else { "Docker VHDX Compact" }
 $form.Size = New-Object Drawing.Size(1100, 770)
 $form.MinimumSize = New-Object Drawing.Size(940, 640)
 $form.StartPosition = "CenterScreen"
@@ -202,6 +213,14 @@ $lblTitle.ForeColor = [Drawing.Color]::White
 $lblTitle.AutoSize = $true
 $lblTitle.Location = New-Object Drawing.Point(76, 9)
 $header.Controls.Add($lblTitle)
+
+$lblVersion = New-Object Windows.Forms.Label
+$lblVersion.Text = if ($script:DcVersion) { "v$script:DcVersion" } else { "" }
+$lblVersion.Font = $fontSub
+$lblVersion.ForeColor = $C.HeadSub
+$lblVersion.AutoSize = $true
+$lblVersion.Location = New-Object Drawing.Point((76 + $lblTitle.PreferredWidth + 2), 20)
+$header.Controls.Add($lblVersion)
 
 $lblSub = New-Object Windows.Forms.Label
 $lblSub.Font = $fontSub
