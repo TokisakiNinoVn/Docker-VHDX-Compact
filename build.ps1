@@ -1,14 +1,15 @@
 # build.ps1 - builds dist\DockerCompact.exe (launcher) and, when Inno Setup
 # is installed, dist\DockerCompact-Setup-<version>.exe.
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Version 1.1.0
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+#
+# The version comes from the VERSION file unless -Version is given.
 #
 # Used both locally and by .github/workflows/release.yml.
 
 [CmdletBinding()]
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$Version = "0.0.0",
+    [string]$Version,
 
     # Only build the launcher exe.
     [switch]$SkipInstaller
@@ -16,6 +17,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
+if (-not $Version) { $Version = (Get-Content (Join-Path $root "VERSION") -Raw).Trim() }
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must look like 1.2.3 (got '$Version')." }
 $dist = Join-Path $root "dist"
 $icon = Join-Path $root "assets\images\icon-no-background.ico"
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
