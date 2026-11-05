@@ -268,7 +268,7 @@ try {
             throw "Docker Engine is unavailable. Prune and compaction cancelled."
         }
 
-        $pruneFlags = if ($PruneAll) { @("-a", "-f") } else { @("-f") }
+        $pruneFlags = @(if ($PruneAll) { "-a", "-f" } else { "-f" })
 
         Write-Step prune running "docker system prune $($pruneFlags -join ' ')"
         & docker.exe system prune @pruneFlags 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }

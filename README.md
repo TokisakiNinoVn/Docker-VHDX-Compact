@@ -68,7 +68,7 @@ git tag v1.0.0
 ```
 
 ```bash
-git push nino v1.0.0
+git push origin v1.0.0
 ```
 
 Pushing a `v*.*.*` tag checks the scripts' syntax and the UI strings, compiles `DockerCompact.exe` with the app icon, builds `dist\DockerCompact-Setup-1.0.0.exe` plus a `.sha256` file, and publishes both to a GitHub Release. Running the workflow by hand (**Actions → Build installer → Run workflow**) only produces a downloadable artifact.

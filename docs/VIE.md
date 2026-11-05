@@ -68,7 +68,7 @@ git tag v1.0.0
 ```
 
 ```bash
-git push nino v1.0.0
+git push origin v1.0.0
 ```
 
 Khi push một tag dạng `v*.*.*`, workflow kiểm tra cú pháp các script và file chữ giao diện, build `DockerCompact.exe` kèm icon app, build `dist\DockerCompact-Setup-1.0.0.exe` cùng file `.sha256`, rồi đăng cả hai lên GitHub Release. Chạy workflow thủ công (**Actions → Build installer → Run workflow**) thì chỉ tạo artifact để tải về.
