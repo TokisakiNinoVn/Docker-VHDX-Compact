@@ -105,7 +105,14 @@ Code được phát triển trên nhánh `dev`; nhánh `main` chỉ nhận các 
 1. Trên `dev`, ghi phiên bản mới vào file `VERSION` (ví dụ `1.1.1`), commit rồi push.
 2. Mở pull request `dev` → `main` rồi merge.
 
-Sau đó workflow kiểm tra cú pháp các script và file chữ giao diện, build `DockerCompact.exe` kèm icon app, build `dist\DockerCompact-Setup-<VERSION>.exe` cùng file `.sha256`, tạo tag `v<VERSION>` trên commit merge, rồi đăng cả hai file lên GitHub Release. Nếu tag đó đã có, build sẽ dừng để không ghi đè bản cũ: tăng `VERSION` rồi merge lại. Push lên nhánh nào, hay đóng pull request mà không merge, đều không build. Chạy workflow thủ công (**Actions → Build installer → Run workflow**) thì chỉ tạo artifact để tải về.
+Sau đó workflow kiểm tra cú pháp các script và file chữ giao diện, build `DockerCompact.exe` kèm icon app, build `dist\DockerCompact-Setup-<VERSION>.exe` cùng file `.sha256`, tạo tag `v<VERSION>` trên commit merge, rồi đăng cả hai file lên GitHub Release. Nếu tag đó đã có:
+
+- Release của tag đã có bộ cài: không build gì và lần chạy vẫn báo thành công, nên merge chỉ sửa tài liệu không bị lỗi. Bộ cài đã phát hành không bao giờ bị ghi đè; muốn phát hành code mới thì tăng `VERSION`;
+- Release chưa có bộ cài (ví dụ được tạo tay trên GitHub): workflow build đúng commit của tag rồi gắn bộ cài vào Release đó.
+
+Không cần tạo tag hay Release bằng tay.
+
+Push lên nhánh nào, hay đóng pull request mà không merge, đều không build. Chạy workflow thủ công (**Actions → Build installer → Run workflow**) thì chỉ tạo artifact để tải về.
 
 Build trên máy: cài [Inno Setup 6](https://jrsoftware.org/isdl.php) rồi chạy (phiên bản lấy từ `VERSION`; thêm `-Version 1.2.3` để ghi đè):
 
