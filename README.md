@@ -1,16 +1,54 @@
-# Docker VHDX Compact (Windows + Docker Desktop)
+<p align="center">
+  <img src="assets/images/icon-no-background.png" alt="Docker VHDX Compact icon" width="128" height="128">
+</p>
 
-**English** | [Tiếng Việt](docs/VIE.md)
+<h1 align="center">Docker VHDX Compact</h1>
 
-Compacts Docker Desktop's WSL2 virtual disk (`docker_data.vhdx`) to give disk space back to Windows. It comes with:
+<p align="center">
+  <b>Reclaim disk space from Docker Desktop on Windows.</b><br>
+  Trims and compacts the WSL2 <code>docker_data.vhdx</code>, with a GUI that shows every step live.
+</p>
 
-- a **GUI** that shows every step live (pending / running / done / skipped / failed), overall and compaction progress, elapsed time, the live output, and before/after sizes;
-- an **English / Vietnamese** interface (switch it in the top-right corner);
-- a **VHDX picker** in case Docker's disk is not in the default location;
-- a **scheduled task** (daily, weekly or monthly, at the time you choose) that does the same thing unattended;
+<p align="center">
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=1d63ed"></a>
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/TokisakiNinoVn/Docker-VHDX-Compact/release.yml?style=flat-square&label=build"></a>
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/TokisakiNinoVn/Docker-VHDX-Compact/total?style=flat-square&color=2ea44f"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=blue"></a>
+</p>
+
+<p align="center">
+  <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=flat-square&logo=windows&logoColor=white">
+  <img alt="PowerShell 5.1" src="https://img.shields.io/badge/PowerShell-5.1-5391FE?style=flat-square&logo=powershell&logoColor=white">
+  <img alt="Docker Desktop" src="https://img.shields.io/badge/Docker%20Desktop-WSL2-2496ED?style=flat-square&logo=docker&logoColor=white">
+  <img alt="WinForms" src="https://img.shields.io/badge/UI-WinForms-512BD4?style=flat-square&logo=dotnet&logoColor=white">
+  <img alt="Inno Setup 6" src="https://img.shields.io/badge/Installer-Inno%20Setup%206-264DE4?style=flat-square">
+  <img alt="GitHub Actions" src="https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white">
+</p>
+
+<p align="center">
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><b>Download</b></a> ·
+  <a href="#features">Features</a> ·
+  <a href="#install-with-the-setup-program">Install</a> ·
+  <a href="#use-the-gui">Usage</a> ·
+  <a href="#tech-stack">Tech stack</a> ·
+  <a href="docs/VIE.md">Tiếng Việt</a>
+</p>
+
+## Features
+
+Docker Desktop's WSL2 disk (`docker_data.vhdx`) grows as you pull images and build, but it never shrinks on its own, even after you delete data. This tool gives that space back to Windows:
+
+- **Live GUI**: every step shown as pending / running / done / skipped / failed, with overall and compaction progress, elapsed time, the live output, and before/after sizes.
+- **Actually shrinks the disk**: runs `fstrim` inside Docker's distro first, so space freed in Linux reaches the VHDX before DiskPart compacts it.
+- **Optional prune**: `docker system prune` + `docker builder prune`, or a deep prune of all unused images and build cache (volumes are kept).
+- **English / Vietnamese** interface, switchable in the top-right corner.
+- **Custom VHDX path** for when Docker's disk is not in the default location.
+- **Scheduled task**: daily, weekly or monthly, at the time you choose, unattended.
 - **TXT + CSV logs** for every run (GUI and task).
+- **Installer** with Start Menu shortcuts, built and released by GitHub Actions.
 
-> **Important:** Compaction closes Docker Desktop and runs `wsl --shutdown`, so running containers and all WSL distros are stopped. Run it when that is safe.
+> [!IMPORTANT]
+> Compaction closes Docker Desktop and runs `wsl --shutdown`, so running containers and all WSL distros are stopped. Run it when that is safe.
 
 ## Screenshots
 
@@ -78,6 +116,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 Without Inno Setup, `-SkipInstaller` builds only `dist\DockerCompact.exe`. The installer wizard itself is in English, because Inno Setup ships no official Vietnamese translation.
 
 The installer is not code-signed, so SmartScreen shows "Windows protected your PC" (choose **More info → Run anyway**). Sign it with a code-signing certificate to remove the warning.
+
+## Tech stack
+
+| Part | Technology |
+|------|------------|
+| GUI | Windows Forms on Windows PowerShell 5.1 (no extra runtime to install) |
+| Compaction engine | PowerShell + DiskPart (`attach vdisk readonly`, `compact vdisk`) |
+| Freeing space inside the disk | `fstrim` in the `docker-desktop` WSL2 distro, `docker system` / `builder prune` |
+| Launcher | C# `DockerCompact.exe`, compiled with the .NET Framework `csc.exe`; carries the app icon and asks for UAC |
+| Scheduling | Windows Task Scheduler (task XML with daily / weekly / monthly triggers) |
+| Localization | UTF-8 JSON string table (English, Vietnamese) |
+| Installer | Inno Setup 6 |
+| CI/CD | GitHub Actions on `windows-latest`: builds and publishes a Release when `dev` is merged into `main` |
 
 ## Requirements
 

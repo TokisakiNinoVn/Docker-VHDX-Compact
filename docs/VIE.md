@@ -1,16 +1,54 @@
-# Docker VHDX Compact (Windows + Docker Desktop)
+<p align="center">
+  <img src="../assets/images/icon-no-background.png" alt="Icon Docker VHDX Compact" width="128" height="128">
+</p>
 
-[English](../README.md) | **Tiếng Việt**
+<h1 align="center">Docker VHDX Compact</h1>
 
-Công cụ thu gọn ổ đĩa ảo WSL2 của Docker Desktop (`docker_data.vhdx`) để trả lại dung lượng trống cho Windows. Bộ công cụ gồm:
+<p align="center">
+  <b>Lấy lại dung lượng ổ cứng từ Docker Desktop trên Windows.</b><br>
+  Trim và nén <code>docker_data.vhdx</code> của WSL2, có giao diện hiển thị trực tiếp từng bước.
+</p>
 
-- **Giao diện (GUI)** hiển thị trực tiếp từng bước (chờ / đang chạy / xong / bỏ qua / lỗi), thanh tiến trình tổng và tiến trình nén, thời gian chạy, log trực tiếp và dung lượng trước/sau;
-- **Giao diện tiếng Anh / tiếng Việt** (đổi ở góc trên bên phải);
-- **Chọn file VHDX** khi ổ đĩa của Docker không nằm ở vị trí mặc định;
-- **Lịch tự động** (hằng ngày, hằng tuần hoặc hằng tháng, vào giờ bạn chọn) làm việc tương tự mà không cần thao tác;
+<p align="center">
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=1d63ed"></a>
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/TokisakiNinoVn/Docker-VHDX-Compact/release.yml?style=flat-square&label=build"></a>
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/TokisakiNinoVn/Docker-VHDX-Compact/total?style=flat-square&color=2ea44f"></a>
+  <a href="../LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=blue"></a>
+</p>
+
+<p align="center">
+  <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=flat-square&logo=windows&logoColor=white">
+  <img alt="PowerShell 5.1" src="https://img.shields.io/badge/PowerShell-5.1-5391FE?style=flat-square&logo=powershell&logoColor=white">
+  <img alt="Docker Desktop" src="https://img.shields.io/badge/Docker%20Desktop-WSL2-2496ED?style=flat-square&logo=docker&logoColor=white">
+  <img alt="WinForms" src="https://img.shields.io/badge/UI-WinForms-512BD4?style=flat-square&logo=dotnet&logoColor=white">
+  <img alt="Inno Setup 6" src="https://img.shields.io/badge/Installer-Inno%20Setup%206-264DE4?style=flat-square">
+  <img alt="GitHub Actions" src="https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white">
+</p>
+
+<p align="center">
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><b>Tải về</b></a> ·
+  <a href="#tính-năng">Tính năng</a> ·
+  <a href="#cài-bằng-bộ-cài">Cài đặt</a> ·
+  <a href="#dùng-giao-diện">Sử dụng</a> ·
+  <a href="#công-nghệ">Công nghệ</a> ·
+  <a href="../README.md">English</a>
+</p>
+
+## Tính năng
+
+Ổ đĩa WSL2 của Docker Desktop (`docker_data.vhdx`) phình to dần khi bạn pull image và build, nhưng không bao giờ tự co lại, kể cả khi đã xoá dữ liệu. Công cụ này trả lại phần dung lượng đó cho Windows:
+
+- **Giao diện trực quan**: từng bước hiển thị trạng thái chờ / đang chạy / xong / bỏ qua / lỗi, kèm tiến trình tổng và tiến trình nén, thời gian chạy, log trực tiếp và dung lượng trước/sau.
+- **Thu nhỏ được thật**: chạy `fstrim` trong distro của Docker trước, để phần dung lượng Linux đã giải phóng về tới VHDX rồi DiskPart mới nén.
+- **Prune tuỳ chọn**: `docker system prune` + `docker builder prune`, hoặc prune sâu toàn bộ image và build cache không dùng (giữ nguyên volume).
+- **Giao diện tiếng Anh / tiếng Việt**, đổi ở góc trên bên phải.
+- **Chọn đường dẫn VHDX** khi ổ đĩa của Docker không nằm ở vị trí mặc định.
+- **Lịch tự động**: hằng ngày, hằng tuần hoặc hằng tháng, vào giờ bạn chọn, không cần thao tác.
 - **Log TXT + CSV** cho mọi lần chạy (từ GUI lẫn tác vụ định kỳ).
+- **Bộ cài** có shortcut trong Start Menu, được build và phát hành tự động bằng GitHub Actions.
 
-> **Quan trọng:** Quá trình nén sẽ đóng Docker Desktop và chạy `wsl --shutdown`, nên mọi container đang chạy và mọi distro WSL đều bị dừng. Chỉ chạy khi việc dừng này an toàn.
+> [!IMPORTANT]
+> Quá trình nén sẽ đóng Docker Desktop và chạy `wsl --shutdown`, nên mọi container đang chạy và mọi distro WSL đều bị dừng. Chỉ chạy khi việc dừng này an toàn.
 
 ## Ảnh chụp
 
@@ -78,6 +116,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 Nếu chưa có Inno Setup, thêm `-SkipInstaller` để chỉ build `dist\DockerCompact.exe`. Wizard của bộ cài là tiếng Anh vì Inno Setup không có bản dịch tiếng Việt chính thức.
 
 Bộ cài chưa được ký số, nên SmartScreen sẽ hiện "Windows protected your PC" (chọn **More info → Run anyway**). Ký bằng certificate code-signing để hết cảnh báo này.
+
+## Công nghệ
+
+| Thành phần | Công nghệ |
+|------------|-----------|
+| Giao diện | Windows Forms trên Windows PowerShell 5.1 (không cần cài thêm runtime) |
+| Engine nén | PowerShell + DiskPart (`attach vdisk readonly`, `compact vdisk`) |
+| Giải phóng dung lượng trong ổ đĩa | `fstrim` trong distro WSL2 `docker-desktop`, `docker system` / `builder prune` |
+| Launcher | C# `DockerCompact.exe`, biên dịch bằng `csc.exe` của .NET Framework; mang icon app và xin quyền UAC |
+| Lập lịch | Windows Task Scheduler (task XML với trigger hằng ngày / hằng tuần / hằng tháng) |
+| Đa ngôn ngữ | Bảng chuỗi JSON UTF-8 (tiếng Anh, tiếng Việt) |
+| Bộ cài | Inno Setup 6 |
+| CI/CD | GitHub Actions trên `windows-latest`: build và phát hành Release khi merge `dev` vào `main` |
 
 ## Yêu cầu
 
