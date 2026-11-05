@@ -105,7 +105,14 @@ Work happens on the `dev` branch; `main` only receives releases. `.github/workfl
 1. On `dev`, set the new version in the `VERSION` file (e.g. `1.1.1`), commit and push.
 2. Open a pull request `dev` → `main` and merge it.
 
-The workflow then checks the scripts' syntax and the UI strings, compiles `DockerCompact.exe` with the app icon, builds `dist\DockerCompact-Setup-<VERSION>.exe` plus a `.sha256` file, creates the tag `v<VERSION>` on the merge commit, and publishes both files to a GitHub Release. If that tag already exists, the build stops so an old release is never overwritten: bump `VERSION` and merge again. Pushes to either branch, and pull requests that are closed without merging, build nothing. Running the workflow by hand (**Actions → Build installer → Run workflow**) only produces a downloadable artifact.
+The workflow then checks the scripts' syntax and the UI strings, compiles `DockerCompact.exe` with the app icon, builds `dist\DockerCompact-Setup-<VERSION>.exe` plus a `.sha256` file, creates the tag `v<VERSION>` on the merge commit, and publishes both files to a GitHub Release. If the tag already exists:
+
+- its Release already has the installer: nothing is built and the run still succeeds, so merges that only change docs are fine. A published installer is never replaced; bump `VERSION` to ship new code;
+- its Release has no installer yet (for example it was created by hand on GitHub): the tagged commit is built and the installer is attached to that Release.
+
+There is no need to create tags or Releases by hand.
+
+Pushes to either branch, and pull requests that are closed without merging, build nothing. Running the workflow by hand (**Actions → Build installer → Run workflow**) only produces a downloadable artifact.
 
 To build locally, install [Inno Setup 6](https://jrsoftware.org/isdl.php) and run (the version comes from `VERSION`; `-Version 1.2.3` overrides it):
 
