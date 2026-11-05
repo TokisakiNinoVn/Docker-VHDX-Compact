@@ -45,7 +45,7 @@ Docker Desktop's WSL2 disk (`docker_data.vhdx`) grows as you pull images and bui
 - **Custom VHDX path** for when Docker's disk is not in the default location.
 - **Scheduled task**: daily, weekly or monthly, at the time you choose, unattended.
 - **TXT + CSV logs** for every run (GUI and task).
-- **Installer** with Start Menu shortcuts, built and released by GitHub Actions.
+- **Installer** with Start Menu shortcuts, built by GitHub Actions for each Release.
 
 > [!IMPORTANT]
 > Compaction closes Docker Desktop and runs `wsl --shutdown`, so running containers and all WSL distros are stopped. Run it when that is safe.
@@ -100,19 +100,16 @@ The weekly task runs as the account that registered it, and the VHDX lives in th
 
 ### Building a release
 
-Work happens on the `dev` branch; `main` only receives releases. `.github/workflows/release.yml` runs `build.ps1` on GitHub Actions **only when a pull request from `dev` is merged into `main`**:
+Work happens on the `dev` branch; `main` only receives releases. Releases are created by hand on GitHub, and `.github/workflows/release.yml` builds the installer with `build.ps1` on GitHub Actions and puts it into the Release.
 
-1. On `dev`, set the new version in the `VERSION` file (e.g. `1.1.1`), commit and push.
-2. Open a pull request `dev` → `main` and merge it.
+**New version:**
 
-The workflow then checks the scripts' syntax and the UI strings, compiles `DockerCompact.exe` with the app icon, builds `dist\DockerCompact-Setup-<VERSION>.exe` plus a `.sha256` file, creates the tag `v<VERSION>` on the merge commit, and publishes both files to a GitHub Release. If the tag already exists:
+1. On `dev`, set the new version in the `VERSION` file (e.g. `1.3.0`), commit, then merge `dev` into `main` with a pull request. No tag `v1.3.0` exists yet, so this merge builds nothing (the run still succeeds).
+2. On GitHub, **Releases → Draft a new release**, create the tag `v1.3.0` on `main`, write the notes and publish. Publishing builds that commit and attaches `DockerCompact-Setup-1.3.0.exe` and its `.sha256` to the Release.
 
-- its Release already has the installer: nothing is built and the run still succeeds, so merges that only change docs are fine. A published installer is never replaced; bump `VERSION` to ship new code;
-- its Release has no installer yet (for example it was created by hand on GitHub): the tagged commit is built and the installer is attached to that Release.
+**Same version, new code:** merge `dev` into `main` without changing `VERSION`. Because the tag `v<VERSION>` exists, the merge commit is built, the tag moves to it, and the installer and `.sha256` in that Release are replaced. The Release text is kept.
 
-There is no need to create tags or Releases by hand.
-
-Pushes to either branch, and pull requests that are closed without merging, build nothing. Running the workflow by hand (**Actions → Build installer → Run workflow**) only produces a downloadable artifact.
+Each build checks the scripts' syntax and the UI strings and compiles `DockerCompact.exe` with the app icon before building the installer. Pushes to either branch, and pull requests that are closed without merging, build nothing. Running the workflow by hand (**Actions → Build installer → Run workflow**) only produces a downloadable artifact.
 
 To build locally, install [Inno Setup 6](https://jrsoftware.org/isdl.php) and run (the version comes from `VERSION`; `-Version 1.2.3` overrides it):
 
@@ -135,7 +132,7 @@ The installer is not code-signed, so SmartScreen shows "Windows protected your P
 | Scheduling | Windows Task Scheduler (task XML with daily / weekly / monthly triggers) |
 | Localization | UTF-8 JSON string table (English, Vietnamese) |
 | Installer | Inno Setup 6 |
-| CI/CD | GitHub Actions on `windows-latest`: builds and publishes a Release when `dev` is merged into `main` |
+| CI/CD | GitHub Actions on `windows-latest`: builds the installer into the GitHub Release (on publish, or when `dev` is merged into `main`) |
 
 ## Requirements
 

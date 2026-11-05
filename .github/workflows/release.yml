@@ -1,22 +1,24 @@
 name: Build installer
 
-# Releases are built only when a pull request from "dev" is merged into
-# "main". The version comes from the VERSION file:
-#   - tag v<VERSION> does not exist yet  -> build the merge commit, create
-#     the tag and the Release;
-#   - tag exists and its Release already has the installer -> nothing to
-#     do (e.g. a docs-only merge); the run still succeeds;
-#   - tag exists but its Release has no installer yet (e.g. the Release was
-#     created by hand) -> build the tagged commit and attach the installer.
-# A published installer is never replaced: bump VERSION to ship new code.
+# Releases are created by hand on GitHub; this workflow only builds the
+# installer and puts it into the Release.
+#
+# 1. A Release is published on GitHub (e.g. v1.3.0)
+#    -> build the tagged commit and attach the installer to that Release.
+# 2. A pull request from "dev" is merged into "main" (version = VERSION file):
+#    - tag v<VERSION> exists -> build the merge commit, move the tag to it and
+#      replace the installer in that Release;
+#    - tag v<VERSION> does not exist -> skip the build (the run succeeds).
 on:
+  release:
+    types: [published]
   pull_request:
     types: [closed]
     branches: [main]
   workflow_dispatch:       # manual test build (artifact only, no release)
 
 permissions:
-  contents: write          # needed to create the tag and the GitHub Release
+  contents: write          # needed to move the tag and upload to the Release
 
 concurrency:
   group: release
@@ -26,6 +28,7 @@ jobs:
   build:
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'release' ||
       (github.event.pull_request.merged == true &&
        github.event.pull_request.head.ref == 'dev' &&
        github.event.pull_request.head.repo.full_name == github.repository)
@@ -34,37 +37,45 @@ jobs:
       run:
         shell: powershell  # Windows PowerShell 5.1, same as the tool's target
     env:
-      IS_RELEASE: ${{ github.event_name == 'pull_request' }}
-      # For a merged PR, start from the merge commit that landed on main.
-      MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+      # For a merged PR, build exactly the merge commit that landed on main;
+      # for a published Release, github.sha is the tagged commit.
+      BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
       GH_TOKEN: ${{ github.token }}
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.MERGE_SHA }}
+          ref: ${{ env.BUILD_SHA }}
 
-      # mode: create | fill | skip | test
+      # mode: fill (Release published) | update (merge, tag exists)
+      #       skip (merge, no tag) | test (run by hand)
       - name: Work out version
         id: ver
+        env:
+          EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          $v = (Get-Content VERSION -Raw).Trim()
-          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "VERSION must look like 1.2.3 (got '$v')." }
-          $tag = "v$v"
-          $mode = "test"
-          if ($env:IS_RELEASE -eq "true") {
-            # cmd /c keeps gh/git stderr away from PowerShell's error handling.
-            cmd /c "git ls-remote --exit-code --tags origin refs/tags/$tag >nul 2>&1"
-            if ($LASTEXITCODE -ne 0) {
-              $mode = "create"
-            } else {
-              $assets = cmd /c "gh release view $tag --json assets -q .assets[].name 2>nul"
-              if (@($assets) -match "^DockerCompact-Setup-$([regex]::Escape($v))\.exe$") {
-                $mode = "skip"
-                "::notice::$tag is already released with its installer. Nothing to build; bump VERSION on dev to publish a new version."
+          $file = (Get-Content VERSION -Raw).Trim()
+          if ($env:EVENT -eq "release") {
+            $tag = $env:RELEASE_TAG
+            $v = $tag -replace '^v', ''
+            if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Release tag must look like v1.2.3 (got '$tag')." }
+            if ($v -ne $file) { "::warning::Release $tag but VERSION in that commit is $file. Building as $v." }
+            $mode = "fill"
+          } else {
+            $v = $file
+            if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "VERSION must look like 1.2.3 (got '$v')." }
+            $tag = "v$v"
+            $mode = "test"
+            if ($env:EVENT -eq "pull_request") {
+              # cmd /c keeps git's stderr away from PowerShell's error handling.
+              cmd /c "git ls-remote --exit-code --tags origin refs/tags/$tag >nul 2>&1"
+              if ($LASTEXITCODE -eq 0) {
+                $mode = "update"
+                "::notice::Building ${tag}: the tag moves to this merge and the installer in its Release is replaced."
               } else {
-                $mode = "fill"
-                "::notice::$tag exists without an installer. Building the tagged commit and attaching the installer."
+                $mode = "skip"
+                "::notice::Tag $tag does not exist, so nothing is built. Publish the Release $tag on GitHub to build it."
               }
             }
           }
@@ -72,12 +83,6 @@ jobs:
           "tag=$tag"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "Version: $v, mode: $mode"
-
-      # An existing tag fixes the code of that version: build exactly it.
-      - uses: actions/checkout@v4
-        if: steps.ver.outputs.mode == 'fill'
-        with:
-          ref: refs/tags/${{ steps.ver.outputs.tag }}
 
       - name: Install Inno Setup (if missing)
         if: steps.ver.outputs.mode != 'skip'
@@ -106,19 +111,25 @@ jobs:
           path: dist/DockerCompact-Setup-*
 
       - name: Publish GitHub Release
-        if: steps.ver.outputs.mode == 'create' || steps.ver.outputs.mode == 'fill'
+        if: steps.ver.outputs.mode == 'update' || steps.ver.outputs.mode == 'fill'
         run: |
           $tag = "${{ steps.ver.outputs.tag }}"
           $files = @(Get-ChildItem dist\DockerCompact-Setup-* | ForEach-Object { $_.FullName })
+          if ("${{ steps.ver.outputs.mode }}" -eq "update") {
+            # Merge without a version bump: move the tag to the code just built.
+            cmd /c "git tag -f $tag $env:BUILD_SHA 2>&1"
+            if ($LASTEXITCODE -ne 0) { throw "git tag failed." }
+            cmd /c "git push --force origin refs/tags/${tag}:refs/tags/$tag 2>&1"
+            if ($LASTEXITCODE -ne 0) { throw "Moving tag $tag failed." }
+          }
+
           cmd /c "gh release view $tag >nul 2>&1"
           if ($LASTEXITCODE -eq 0) {
-            # Release made by hand: keep its text, just attach the files.
-            # (--clobber can only hit a stray .sha256: "fill" means the installer is missing.)
+            # Keep the Release text, add or replace the installer and its checksum.
             gh release upload $tag @files --clobber
-          } elseif ("${{ steps.ver.outputs.mode }}" -eq "fill") {
-            # Tag exists without a Release.
-            gh release create $tag @files --verify-tag --title "Docker VHDX Compact $tag" --generate-notes
           } else {
-            gh release create $tag @files --target $env:MERGE_SHA --title "Docker VHDX Compact $tag" --generate-notes
+            # Tag without a Release (e.g. pushed with git): create the Release.
+            gh release create $tag @files --verify-tag --title "Docker VHDX Compact $tag" --generate-notes
           }
           if ($LASTEXITCODE -ne 0) { throw "gh release failed." }
+          "Installer published to $tag (tag now at $env:BUILD_SHA)."

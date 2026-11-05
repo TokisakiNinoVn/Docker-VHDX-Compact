@@ -45,7 +45,7 @@
 - **Chọn đường dẫn VHDX** khi ổ đĩa của Docker không nằm ở vị trí mặc định.
 - **Lịch tự động**: hằng ngày, hằng tuần hoặc hằng tháng, vào giờ bạn chọn, không cần thao tác.
 - **Log TXT + CSV** cho mọi lần chạy (từ GUI lẫn tác vụ định kỳ).
-- **Bộ cài** có shortcut trong Start Menu, được build và phát hành tự động bằng GitHub Actions.
+- **Bộ cài** có shortcut trong Start Menu, được GitHub Actions build tự động cho mỗi Release.
 
 > [!IMPORTANT]
 > Quá trình nén sẽ đóng Docker Desktop và chạy `wsl --shutdown`, nên mọi container đang chạy và mọi distro WSL đều bị dừng. Chỉ chạy khi việc dừng này an toàn.
@@ -100,19 +100,16 @@ Tác vụ hàng tuần chạy dưới tài khoản đã đăng ký nó, và file
 
 ### Build bản phát hành
 
-Code được phát triển trên nhánh `dev`; nhánh `main` chỉ nhận các bản phát hành. `.github/workflows/release.yml` chạy `build.ps1` trên GitHub Actions **chỉ khi một pull request từ `dev` được merge vào `main`**:
+Code được phát triển trên nhánh `dev`; nhánh `main` chỉ nhận các bản phát hành. Release được tạo bằng tay trên GitHub, còn `.github/workflows/release.yml` build bộ cài bằng `build.ps1` trên GitHub Actions rồi đưa vào Release.
 
-1. Trên `dev`, ghi phiên bản mới vào file `VERSION` (ví dụ `1.1.1`), commit rồi push.
-2. Mở pull request `dev` → `main` rồi merge.
+**Phiên bản mới:**
 
-Sau đó workflow kiểm tra cú pháp các script và file chữ giao diện, build `DockerCompact.exe` kèm icon app, build `dist\DockerCompact-Setup-<VERSION>.exe` cùng file `.sha256`, tạo tag `v<VERSION>` trên commit merge, rồi đăng cả hai file lên GitHub Release. Nếu tag đó đã có:
+1. Trên `dev`, ghi phiên bản mới vào file `VERSION` (ví dụ `1.3.0`), commit, rồi merge `dev` vào `main` bằng pull request. Lúc này chưa có tag `v1.3.0` nên lần merge này không build gì (vẫn báo thành công).
+2. Trên GitHub, vào **Releases → Draft a new release**, tạo tag `v1.3.0` trên `main`, viết mô tả rồi publish. Khi publish, workflow build commit đó và gắn `DockerCompact-Setup-1.3.0.exe` cùng file `.sha256` vào Release.
 
-- Release của tag đã có bộ cài: không build gì và lần chạy vẫn báo thành công, nên merge chỉ sửa tài liệu không bị lỗi. Bộ cài đã phát hành không bao giờ bị ghi đè; muốn phát hành code mới thì tăng `VERSION`;
-- Release chưa có bộ cài (ví dụ được tạo tay trên GitHub): workflow build đúng commit của tag rồi gắn bộ cài vào Release đó.
+**Giữ phiên bản, code mới:** merge `dev` vào `main` mà không đổi `VERSION`. Vì tag `v<VERSION>` đã có, workflow build commit merge, dời tag sang commit đó, rồi thay bộ cài và file `.sha256` trong Release. Nội dung mô tả của Release được giữ nguyên.
 
-Không cần tạo tag hay Release bằng tay.
-
-Push lên nhánh nào, hay đóng pull request mà không merge, đều không build. Chạy workflow thủ công (**Actions → Build installer → Run workflow**) thì chỉ tạo artifact để tải về.
+Mỗi lần build đều kiểm tra cú pháp các script và file chữ giao diện, build `DockerCompact.exe` kèm icon app rồi mới build bộ cài. Push lên nhánh nào, hay đóng pull request mà không merge, đều không build. Chạy workflow thủ công (**Actions → Build installer → Run workflow**) thì chỉ tạo artifact để tải về.
 
 Build trên máy: cài [Inno Setup 6](https://jrsoftware.org/isdl.php) rồi chạy (phiên bản lấy từ `VERSION`; thêm `-Version 1.2.3` để ghi đè):
 
@@ -135,7 +132,7 @@ Bộ cài chưa được ký số, nên SmartScreen sẽ hiện "Windows protect
 | Lập lịch | Windows Task Scheduler (task XML với trigger hằng ngày / hằng tuần / hằng tháng) |
 | Đa ngôn ngữ | Bảng chuỗi JSON UTF-8 (tiếng Anh, tiếng Việt) |
 | Bộ cài | Inno Setup 6 |
-| CI/CD | GitHub Actions trên `windows-latest`: build và phát hành Release khi merge `dev` vào `main` |
+| CI/CD | GitHub Actions trên `windows-latest`: build bộ cài vào GitHub Release (khi publish Release, hoặc khi merge `dev` vào `main`) |
 
 ## Yêu cầu
 
