@@ -25,6 +25,12 @@ $script:DcVhdxDefault = Join-Path $env:LOCALAPPDATA "Docker\wsl\disk\docker_data
 $script:DcVhdxPath    = $script:DcVhdxDefault
 $script:DcLangPath    = Join-Path $script:DcRoot "DockerCompact-Lang.json"
 $script:DcSettingsPath = Join-Path $env:APPDATA "DockerCompact\settings.json"
+$script:DcStartupTaskName = "DockerCompact-Startup"
+$script:DcDataMount   = "/mnt/docker-desktop-disk"
+# GitHub repository used for update checks.
+$script:DcRepo        = "TokisakiNinoVn/Docker-VHDX-Compact"
+# True when running from the installer's copy (updates install over it).
+$script:DcIsInstalled = $script:DcLogDir -like "$env:ProgramData\*"
 
 # App version from the VERSION file (shipped next to the scripts).
 $script:DcVersion = ""
@@ -396,4 +402,224 @@ function Get-DcSchedule {
     catch { }
 
     return $s
+}
+
+
+# ------------------------------------------------------------
+# VHDX information (used by the engine's preflight and the UI)
+# ------------------------------------------------------------
+function Test-FileUnlocked {
+    param([string]$Path)
+
+    try {
+        $fs = [IO.File]::Open(
+            $Path,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::None
+        )
+        $fs.Dispose()
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Get-DockerDiskUsedBytes {
+    # Space used by the ext4 filesystem inside the VHDX. Only call this while
+    # Docker Desktop is running, or wsl.exe would boot the distro.
+    $out = @(& wsl.exe -d docker-desktop -u root -e df -B1 $script:DcDataMount 2>$null |
+        ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0 -or $out.Count -lt 2) { return $null }
+
+    $cols = ($out[-1].Trim() -split "\s+")
+    if ($cols.Count -ge 3 -and $cols[2] -match '^\d+$') { return [int64]$cols[2] }
+    return $null
+}
+
+function Read-VhdxMetadata {
+    # Reads the maximum (virtual) size and the disk type straight from the
+    # VHDX header (MS-VHDX spec), so it works without the Hyper-V module.
+    # Returns $null when the file cannot be read (e.g. opened exclusively).
+    param([string]$Path)
+
+    $regionMeta = [guid]"8B7CA206-4790-4B9A-B8FE-575F050F886E"
+    $itemSize   = [guid]"2FA54224-CD1B-4876-B211-5DBED83BF4B8"
+    $itemParams = [guid]"CAA16737-FA36-4D43-B3B6-33F0AA44E76B"
+
+    $fs = $null
+    try {
+        $fs = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read,
+            ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+        $br = New-Object IO.BinaryReader($fs)
+
+        $sig = [Text.Encoding]::ASCII.GetString($br.ReadBytes(8))
+        if ($sig -ne "vhdxfile") { return $null }
+
+        # Region table (first copy at 192 KiB).
+        $fs.Position = 192KB
+        if ([Text.Encoding]::ASCII.GetString($br.ReadBytes(4)) -ne "regi") { return $null }
+        [void]$br.ReadUInt32()                      # checksum
+        $count = $br.ReadUInt32()
+        [void]$br.ReadUInt32()                      # reserved
+        $metaOffset = $null
+        for ($i = 0; $i -lt [math]::Min($count, 2047); $i++) {
+            $id = [guid]::new([byte[]]$br.ReadBytes(16))
+            $off = $br.ReadUInt64()
+            [void]$br.ReadUInt32(); [void]$br.ReadUInt32()
+            if ($id -eq $regionMeta) { $metaOffset = [int64]$off }
+        }
+        if ($null -eq $metaOffset) { return $null }
+
+        # Metadata table.
+        $fs.Position = $metaOffset
+        if ([Text.Encoding]::ASCII.GetString($br.ReadBytes(8)) -ne "metadata") { return $null }
+        [void]$br.ReadUInt16()
+        $entries = $br.ReadUInt16()
+        [void]$br.ReadBytes(20)
+        $items = @{}
+        for ($i = 0; $i -lt [math]::Min($entries, 2047); $i++) {
+            $id = [guid]::new([byte[]]$br.ReadBytes(16))
+            $off = $br.ReadUInt32()
+            [void]$br.ReadUInt32(); [void]$br.ReadUInt32(); [void]$br.ReadUInt32()
+            $items[$id] = $off
+        }
+
+        $r = [pscustomobject]@{ VirtualSize = $null; Type = $null }
+        if ($items.ContainsKey($itemSize)) {
+            $fs.Position = $metaOffset + $items[$itemSize]
+            $r.VirtualSize = [int64]$br.ReadUInt64()
+        }
+        if ($items.ContainsKey($itemParams)) {
+            $fs.Position = $metaOffset + $items[$itemParams]
+            [void]$br.ReadUInt32()                  # block size
+            $flags = $br.ReadUInt32()
+            $r.Type = if ($flags -band 2) { "Differencing" } elseif ($flags -band 1) { "Fixed" } else { "Dynamic" }
+        }
+        return $r
+    }
+    catch {
+        return $null
+    }
+    finally {
+        if ($fs) { $fs.Dispose() }
+    }
+}
+
+function Get-VhdxInfo {
+    # Everything the UI's "VHDX info" view shows. Sizes are in bytes.
+    param([string]$Path = $script:DcVhdxPath)
+
+    $i = [ordered]@{
+        Path          = $Path
+        Exists        = $false
+        FileSize      = $null
+        OnDisk        = $null
+        Created       = $null
+        Modified      = $null
+        VirtualSize   = $null
+        Type          = $null
+        Sparse        = $false
+        InUse         = $null
+        DockerRunning = [bool](Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue)
+        UsedInside    = $null
+        Drive         = $Path.Substring(0, [math]::Min(2, $Path.Length))
+        DriveFree     = $null
+    }
+
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        $item = Get-Item -LiteralPath $Path
+        $i.Exists   = $true
+        $i.FileSize = [int64]$item.Length
+        $i.OnDisk   = Get-SizeOnDisk -Path $Path
+        $i.Created  = $item.CreationTime
+        $i.Modified = $item.LastWriteTime
+        $i.Sparse   = [bool]($item.Attributes -band [IO.FileAttributes]::SparseFile)
+        $i.InUse    = -not (Test-FileUnlocked -Path $Path)
+
+        $meta = Read-VhdxMetadata -Path $Path
+        if ($meta) { $i.VirtualSize = $meta.VirtualSize; $i.Type = $meta.Type }
+        elseif (Get-Command Get-VHD -ErrorAction SilentlyContinue) {
+            try {
+                $vhd = Get-VHD -Path $Path -ErrorAction Stop
+                $i.VirtualSize = [int64]$vhd.Size
+                $i.Type = [string]$vhd.VhdType
+            }
+            catch { }
+        }
+
+        if ($i.DockerRunning) { $i.UsedInside = Get-DockerDiskUsedBytes }
+    }
+
+    try {
+        $drive = Get-PSDrive -Name ($Path.Substring(0, 1)) -ErrorAction Stop
+        $i.DriveFree = [int64]$drive.Free
+    }
+    catch { }
+
+    return [pscustomobject]$i
+}
+
+
+# ------------------------------------------------------------
+# Start with Windows: a logon task that opens the UI (elevated,
+# so there is no UAC prompt at every sign-in).
+# ------------------------------------------------------------
+function Get-DcStartupTask {
+    return Get-ScheduledTask -TaskName $script:DcStartupTaskName -ErrorAction SilentlyContinue
+}
+
+function Set-DcStartup {
+    param([Parameter(Mandatory = $true)][bool]$Enabled)
+
+    if (-not $Enabled) {
+        if (Get-DcStartupTask) {
+            Unregister-ScheduledTask -TaskName $script:DcStartupTaskName -Confirm:$false -ErrorAction Stop
+        }
+        return
+    }
+
+    $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $esc = { param($s) [Security.SecurityElement]::Escape($s) }
+    $psExe = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "{0}" -Minimized' -f $script:DcUiPath
+
+    $xml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Opens Docker VHDX Compact when you sign in.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>$(& $esc $user)</UserId>
+      <Delay>PT30S</Delay>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>$(& $esc $user)</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>$(& $esc $psExe)</Command>
+      <Arguments>$(& $esc $arguments)</Arguments>
+      <WorkingDirectory>$(& $esc $script:DcRoot)</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+"@
+    Register-ScheduledTask -TaskName $script:DcStartupTaskName -Xml $xml -Force -ErrorAction Stop | Out-Null
 }

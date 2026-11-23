@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=1d63ed"></a>
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?sort=semver&style=flat-square&color=1d63ed"></a>
   <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/TokisakiNinoVn/Docker-VHDX-Compact/release.yml?style=flat-square&label=build"></a>
   <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/TokisakiNinoVn/Docker-VHDX-Compact/total?style=flat-square&color=2ea44f"></a>
   <a href="../LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=blue"></a>
@@ -44,8 +44,11 @@
 - **Giao diện tiếng Anh / tiếng Việt**, đổi ở góc trên bên phải.
 - **Chọn đường dẫn VHDX** khi ổ đĩa của Docker không nằm ở vị trí mặc định.
 - **Lịch tự động**: hằng ngày, hằng tuần hoặc hằng tháng, vào giờ bạn chọn, không cần thao tác.
+- **Thông tin VHDX**: dung lượng tối đa, loại ổ đĩa, Docker có đang mở file không, và dữ liệu thật sự bên trong là bao nhiêu (để biết nén được tối đa bao nhiêu).
+- **Khởi động cùng Windows**: tự mở app (thu nhỏ) khi bạn đăng nhập, không hỏi UAC.
+- **Tự kiểm tra cập nhật**: phát hiện phiên bản mới trên GitHub Releases và cài chỉ với một cú bấm (bản đã cài).
 - **Log TXT + CSV** cho mọi lần chạy (từ GUI lẫn tác vụ định kỳ).
-- **Bộ cài** có shortcut trong Start Menu, được build và phát hành tự động bằng GitHub Actions.
+- **Bộ cài** có shortcut trong Start Menu, được GitHub Actions build tự động cho mỗi Release.
 
 > [!IMPORTANT]
 > Quá trình nén sẽ đóng Docker Desktop và chạy `wsl --shutdown`, nên mọi container đang chạy và mọi distro WSL đều bị dừng. Chỉ chạy khi việc dừng này an toàn.
@@ -94,25 +97,22 @@ Tải `DockerCompact-Setup-<phiên bản>.exe` ở trang **Releases** của repo
 - tuỳ chọn đăng ký lịch hằng tuần (Chủ nhật 03:00) cho user đang chạy bộ cài. Đổi lịch sau bằng nút **Lên lịch...** trong app;
 - ghi log vào `C:\ProgramData\DockerCompact\logs`.
 
-Cài im lặng cho nhiều máy: `DockerCompact-Setup-1.0.0.exe /VERYSILENT /TASKS="weeklytask"`. Khi gỡ cài đặt, tác vụ định kỳ bị xoá nhưng log được giữ lại.
+Cài im lặng cho nhiều máy: `DockerCompact-Setup-1.0.0.exe /VERYSILENT /TASKS="weeklytask"`. Khi gỡ cài đặt, tác vụ định kỳ và tác vụ "Khởi động cùng Windows" bị xoá, log được giữ lại.
 
 Tác vụ hàng tuần chạy dưới tài khoản đã đăng ký nó, và file VHDX nằm trong `%LOCALAPPDATA%` của user đó. Vì vậy trên mỗi máy, hãy đăng ký tác vụ bằng chính tài khoản dùng Docker, qua bộ cài hoặc nút **Lên lịch...** trong app.
 
 ### Build bản phát hành
 
-Code được phát triển trên nhánh `dev`; nhánh `main` chỉ nhận các bản phát hành. `.github/workflows/release.yml` chạy `build.ps1` trên GitHub Actions **chỉ khi một pull request từ `dev` được merge vào `main`**:
+Code được phát triển trên nhánh `dev`; nhánh `main` chỉ nhận các bản phát hành. Release được tạo bằng tay trên GitHub, còn `.github/workflows/release.yml` build bộ cài bằng `build.ps1` trên GitHub Actions rồi đưa vào Release.
 
-1. Trên `dev`, ghi phiên bản mới vào file `VERSION` (ví dụ `1.1.1`), commit rồi push.
-2. Mở pull request `dev` → `main` rồi merge.
+**Phiên bản mới:**
 
-Sau đó workflow kiểm tra cú pháp các script và file chữ giao diện, build `DockerCompact.exe` kèm icon app, build `dist\DockerCompact-Setup-<VERSION>.exe` cùng file `.sha256`, tạo tag `v<VERSION>` trên commit merge, rồi đăng cả hai file lên GitHub Release. Nếu tag đó đã có:
+1. Trên `dev`, ghi phiên bản mới vào file `VERSION` (ví dụ `1.3.0`), commit, rồi merge `dev` vào `main` bằng pull request. Lúc này chưa có tag `v1.3.0` nên lần merge này không build gì (vẫn báo thành công).
+2. Trên GitHub, vào **Releases → Draft a new release**, tạo tag `v1.3.0` trên `main`, viết mô tả rồi publish. Khi publish, workflow build commit đó và gắn `DockerCompact-Setup-1.3.0.exe` cùng file `.sha256` vào Release.
 
-- Release của tag đã có bộ cài: không build gì và lần chạy vẫn báo thành công, nên merge chỉ sửa tài liệu không bị lỗi. Bộ cài đã phát hành không bao giờ bị ghi đè; muốn phát hành code mới thì tăng `VERSION`;
-- Release chưa có bộ cài (ví dụ được tạo tay trên GitHub): workflow build đúng commit của tag rồi gắn bộ cài vào Release đó.
+**Giữ phiên bản, code mới:** merge `dev` vào `main` mà không đổi `VERSION`. Vì tag `v<VERSION>` đã có, workflow build commit merge, dời tag sang commit đó, rồi thay bộ cài và file `.sha256` trong Release. Nội dung mô tả của Release được giữ nguyên.
 
-Không cần tạo tag hay Release bằng tay.
-
-Push lên nhánh nào, hay đóng pull request mà không merge, đều không build. Chạy workflow thủ công (**Actions → Build installer → Run workflow**) thì chỉ tạo artifact để tải về.
+Mỗi lần build đều kiểm tra cú pháp các script và file chữ giao diện, build `DockerCompact.exe` kèm icon app rồi mới build bộ cài. Push lên nhánh nào, hay đóng pull request mà không merge, đều không build. Chạy workflow thủ công (**Actions → Build installer → Run workflow**) thì chỉ tạo artifact để tải về.
 
 Build trên máy: cài [Inno Setup 6](https://jrsoftware.org/isdl.php) rồi chạy (phiên bản lấy từ `VERSION`; thêm `-Version 1.2.3` để ghi đè):
 
@@ -135,7 +135,7 @@ Bộ cài chưa được ký số, nên SmartScreen sẽ hiện "Windows protect
 | Lập lịch | Windows Task Scheduler (task XML với trigger hằng ngày / hằng tuần / hằng tháng) |
 | Đa ngôn ngữ | Bảng chuỗi JSON UTF-8 (tiếng Anh, tiếng Việt) |
 | Bộ cài | Inno Setup 6 |
-| CI/CD | GitHub Actions trên `windows-latest`: build và phát hành Release khi merge `dev` vào `main` |
+| CI/CD | GitHub Actions trên `windows-latest`: build bộ cài vào GitHub Release (khi publish Release, hoặc khi merge `dev` vào `main`) |
 
 ## Yêu cầu
 
@@ -187,6 +187,9 @@ Các thẻ phía trên hiển thị kích thước file VHDX, dung lượng th�
 - **Đổi...** cạnh đường dẫn VHDX dùng để chọn file `docker_data.vhdx` khác (ví dụ khi đã chuyển disk image của Docker sang ổ khác). **Dùng mặc định** quay về đường dẫn mặc định. Thẻ dung lượng trống hiển thị theo ổ chứa VHDX đã chọn.
 - **Lên lịch...** thiết lập lịch tự động: hằng ngày (mỗi N ngày), hằng tuần (mỗi N tuần, vào các ngày được chọn) hoặc hằng tháng (một ngày trong tháng, hoặc ngày cuối tháng), vào giờ bạn chọn, có thể kèm dọn dẹp. Dialog hiển thị trước lịch, ví dụ *hằng tuần vào CN lúc 03:00*. **Xoá lịch** xoá task. Lịch dùng đường dẫn VHDX đang chọn trong app.
 - **Mở thư mục log** mở thư mục log.
+- **Thông tin VHDX** (cạnh **Đổi...**) ghi chi tiết file VHDX vào khung log: kích thước file và dung lượng thật chiếm trên ổ, dung lượng tối đa và loại ổ đĩa (đọc thẳng từ header VHDX, không cần module Hyper-V), ngày tạo/sửa, Docker Desktop / WSL có đang mở file không, dung lượng trống của ổ chứa nó, và khi Docker Desktop đang chạy thì cả dữ liệu thật sự bên trong cùng mức tối đa có thể thu hồi. Nút này cũng làm mới các thẻ số liệu.
+- **Khởi động cùng Windows** (góc trên bên phải) đăng ký một tác vụ khi đăng nhập (`DockerCompact-Startup`), mở app ở dạng thu nhỏ 30 giây sau khi bạn đăng nhập. Tác vụ chạy với quyền cao nhất nên không hỏi UAC. Bỏ tick để xoá tác vụ. Mở app lần nữa khi nó đang chạy sẽ đưa cửa sổ đang có lên trước.
+- **Cập nhật**: khi mở, app kiểm tra GitHub Releases xem có phiên bản mới hơn không. Nếu có, dòng **Cập nhật lên vX.Y.Z** hiện cạnh số phiên bản; bấm vào để tải bộ cài, đối chiếu với file `.sha256`, cài im lặng rồi mở lại app. Lịch tự động của bạn được giữ nguyên. **Kiểm tra cập nhật** để kiểm tra lại bằng tay. Bản portable (không cài bằng bộ cài) chỉ mở trang tải về.
 
 ## Tác vụ hàng tuần
 

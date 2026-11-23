@@ -149,26 +149,6 @@ function Invoke-DetachVhdx {
     throw "Could not confirm that the VHDX was detached. Stopping for safety."
 }
 
-
-function Test-FileUnlocked {
-    param([string]$Path)
-
-    try {
-        $fs = [IO.File]::Open(
-            $Path,
-            [IO.FileMode]::Open,
-            [IO.FileAccess]::Read,
-            [IO.FileShare]::None
-        )
-        $fs.Dispose()
-        return $true
-    }
-    catch {
-        return $false
-    }
-}
-
-
 function Wait-FileUnlocked {
     param([string]$Path, [int]$TimeoutSeconds = 60)
 
@@ -187,17 +167,7 @@ function Wait-FileUnlocked {
 # WSL distro. The mount has no "discard" option, so space freed inside
 # (deleted images, build cache...) is not released to the VHDX until
 # fstrim runs. Without it, "compact vdisk" has nothing to reclaim.
-$script:DataMount = "/mnt/docker-desktop-disk"
-
-function Get-DockerDiskUsedBytes {
-    $out = @(& wsl.exe -d docker-desktop -u root -e df -B1 $script:DataMount 2>$null |
-        ForEach-Object { "$_" })
-    if ($LASTEXITCODE -ne 0 -or $out.Count -lt 2) { return $null }
-
-    $cols = ($out[-1].Trim() -split "\s+")
-    if ($cols.Count -ge 3 -and $cols[2] -match '^\d+$') { return [int64]$cols[2] }
-    return $null
-}
+$script:DataMount = $script:DcDataMount
 
 function Invoke-DockerFsTrim {
     # Returns trimmed bytes (or 0 when the output could not be parsed); throws on failure.

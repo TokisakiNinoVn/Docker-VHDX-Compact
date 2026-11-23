@@ -88,11 +88,22 @@ Filename: "{#PsExe}"; \
   StatusMsg: "{cm:Registering}"; Flags: runhidden waituntilterminated; \
   Tasks: weeklytask\prune
 Filename: "{app}\{#AppExe}"; Description: "{cm:OpenApp}"; Flags: postinstall nowait skipifsilent
+; In-app updates run the installer with /RELAUNCH=1: open the app again.
+Filename: "{app}\{#AppExe}"; Flags: nowait; Check: IsRelaunch
 
 [UninstallRun]
 Filename: "{#PsExe}"; \
   Parameters: "-NoProfile -Command ""Unregister-ScheduledTask -TaskName DockerCompact -Confirm:$false -ErrorAction SilentlyContinue"""; \
   Flags: runhidden waituntilterminated; RunOnceId: "RemoveDockerCompactTask"
+Filename: "{#PsExe}"; \
+  Parameters: "-NoProfile -Command ""Unregister-ScheduledTask -TaskName DockerCompact-Startup -Confirm:$false -ErrorAction SilentlyContinue"""; \
+  Flags: runhidden waituntilterminated; RunOnceId: "RemoveDockerCompactStartup"
 
 ; Logs in %ProgramData%\DockerCompact\logs and per-user settings in
 ; %APPDATA%\DockerCompact are kept on uninstall.
+
+[Code]
+function IsRelaunch: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;

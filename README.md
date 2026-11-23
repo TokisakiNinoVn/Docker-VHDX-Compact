@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=1d63ed"></a>
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?sort=semver&style=flat-square&color=1d63ed"></a>
   <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/TokisakiNinoVn/Docker-VHDX-Compact/release.yml?style=flat-square&label=build"></a>
   <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/TokisakiNinoVn/Docker-VHDX-Compact/total?style=flat-square&color=2ea44f"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=blue"></a>
@@ -44,8 +44,11 @@ Docker Desktop's WSL2 disk (`docker_data.vhdx`) grows as you pull images and bui
 - **English / Vietnamese** interface, switchable in the top-right corner.
 - **Custom VHDX path** for when Docker's disk is not in the default location.
 - **Scheduled task**: daily, weekly or monthly, at the time you choose, unattended.
+- **VHDX info**: maximum size, disk type, whether Docker has it open, and how much data is really inside (so you know what compaction can reclaim).
+- **Start with Windows**: opens the app minimized when you sign in, without a UAC prompt.
+- **Automatic update check**: finds new versions on GitHub Releases and installs them in one click (installed copy).
 - **TXT + CSV logs** for every run (GUI and task).
-- **Installer** with Start Menu shortcuts, built and released by GitHub Actions.
+- **Installer** with Start Menu shortcuts, built by GitHub Actions for each Release.
 
 > [!IMPORTANT]
 > Compaction closes Docker Desktop and runs `wsl --shutdown`, so running containers and all WSL distros are stopped. Run it when that is safe.
@@ -94,25 +97,22 @@ Download `DockerCompact-Setup-<version>.exe` from the repository's **Releases** 
 - optionally registers a weekly task (Sunday 03:00) for the user running the setup. Change it later with **Schedule...** in the app;
 - writes logs to `C:\ProgramData\DockerCompact\logs`.
 
-Silent install for many machines: `DockerCompact-Setup-1.0.0.exe /VERYSILENT /TASKS="weeklytask"`. Uninstalling removes the scheduled task and keeps the logs.
+Silent install for many machines: `DockerCompact-Setup-1.0.0.exe /VERYSILENT /TASKS="weeklytask"`. Uninstalling removes the scheduled task and the "Start with Windows" task, and keeps the logs.
 
 The weekly task runs as the account that registered it, and the VHDX lives in that user's `%LOCALAPPDATA%`. So on each machine, register the task as the person who uses Docker, from the setup program or with the app's **Schedule...** button.
 
 ### Building a release
 
-Work happens on the `dev` branch; `main` only receives releases. `.github/workflows/release.yml` runs `build.ps1` on GitHub Actions **only when a pull request from `dev` is merged into `main`**:
+Work happens on the `dev` branch; `main` only receives releases. Releases are created by hand on GitHub, and `.github/workflows/release.yml` builds the installer with `build.ps1` on GitHub Actions and puts it into the Release.
 
-1. On `dev`, set the new version in the `VERSION` file (e.g. `1.1.1`), commit and push.
-2. Open a pull request `dev` → `main` and merge it.
+**New version:**
 
-The workflow then checks the scripts' syntax and the UI strings, compiles `DockerCompact.exe` with the app icon, builds `dist\DockerCompact-Setup-<VERSION>.exe` plus a `.sha256` file, creates the tag `v<VERSION>` on the merge commit, and publishes both files to a GitHub Release. If the tag already exists:
+1. On `dev`, set the new version in the `VERSION` file (e.g. `1.3.0`), commit, then merge `dev` into `main` with a pull request. No tag `v1.3.0` exists yet, so this merge builds nothing (the run still succeeds).
+2. On GitHub, **Releases → Draft a new release**, create the tag `v1.3.0` on `main`, write the notes and publish. Publishing builds that commit and attaches `DockerCompact-Setup-1.3.0.exe` and its `.sha256` to the Release.
 
-- its Release already has the installer: nothing is built and the run still succeeds, so merges that only change docs are fine. A published installer is never replaced; bump `VERSION` to ship new code;
-- its Release has no installer yet (for example it was created by hand on GitHub): the tagged commit is built and the installer is attached to that Release.
+**Same version, new code:** merge `dev` into `main` without changing `VERSION`. Because the tag `v<VERSION>` exists, the merge commit is built, the tag moves to it, and the installer and `.sha256` in that Release are replaced. The Release text is kept.
 
-There is no need to create tags or Releases by hand.
-
-Pushes to either branch, and pull requests that are closed without merging, build nothing. Running the workflow by hand (**Actions → Build installer → Run workflow**) only produces a downloadable artifact.
+Each build checks the scripts' syntax and the UI strings and compiles `DockerCompact.exe` with the app icon before building the installer. Pushes to either branch, and pull requests that are closed without merging, build nothing. Running the workflow by hand (**Actions → Build installer → Run workflow**) only produces a downloadable artifact.
 
 To build locally, install [Inno Setup 6](https://jrsoftware.org/isdl.php) and run (the version comes from `VERSION`; `-Version 1.2.3` overrides it):
 
@@ -135,7 +135,7 @@ The installer is not code-signed, so SmartScreen shows "Windows protected your P
 | Scheduling | Windows Task Scheduler (task XML with daily / weekly / monthly triggers) |
 | Localization | UTF-8 JSON string table (English, Vietnamese) |
 | Installer | Inno Setup 6 |
-| CI/CD | GitHub Actions on `windows-latest`: builds and publishes a Release when `dev` is merged into `main` |
+| CI/CD | GitHub Actions on `windows-latest`: builds the installer into the GitHub Release (on publish, or when `dev` is merged into `main`) |
 
 ## Requirements
 
@@ -187,6 +187,9 @@ The cards at the top show the VHDX file size, the space it actually uses on disk
 - **Change...** next to the VHDX path picks another `docker_data.vhdx` (for example when Docker's disk image location was moved to another drive). **Use default** goes back to the default path. The free-space card follows the drive of the chosen VHDX.
 - **Schedule...** sets up the scheduled task: daily (every N days), weekly (every N weeks, on chosen days) or monthly (a day of the month, or the last day), at the time you pick, optionally with prune. It shows a preview such as *every week on Sun at 03:00*, and **Remove schedule** deletes the task. The task uses the VHDX path selected in the app.
 - **Open logs** opens the `logs` folder.
+- **VHDX info** (next to **Change...**) writes the VHDX details to the log panel: file size and real space used on the host, maximum size and type (read from the VHDX header, no Hyper-V module needed), created/modified dates, whether Docker Desktop / WSL has the file open, free space on its drive and, while Docker Desktop is running, how much data the disk really holds and the most compaction can reclaim. It also refreshes the cards.
+- **Start with Windows** (top right) registers a logon task (`DockerCompact-Startup`) that opens the app minimized 30 seconds after you sign in. It runs with highest privileges, so there is no UAC prompt. Untick it to remove the task. Opening the app again while it is already running brings the existing window to the front.
+- **Updates**: at startup the app checks GitHub Releases for a newer version. When one exists, **Update to vX.Y.Z** appears next to the version number; click it to download the installer, verify it against its `.sha256` file, install it silently and reopen the app. Your scheduled task is kept as it is. **Check for updates** checks again by hand. A portable copy (not installed with the setup program) only opens the download page.
 
 ## Weekly scheduled task
 
