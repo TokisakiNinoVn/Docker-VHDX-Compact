@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=1d63ed"></a>
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?sort=semver&style=flat-square&color=1d63ed"></a>
   <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/TokisakiNinoVn/Docker-VHDX-Compact/release.yml?style=flat-square&label=build"></a>
   <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/TokisakiNinoVn/Docker-VHDX-Compact/total?style=flat-square&color=2ea44f"></a>
   <a href="../LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=blue"></a>
@@ -44,6 +44,9 @@
 - **Giao diện tiếng Anh / tiếng Việt**, đổi ở góc trên bên phải.
 - **Chọn đường dẫn VHDX** khi ổ đĩa của Docker không nằm ở vị trí mặc định.
 - **Lịch tự động**: hằng ngày, hằng tuần hoặc hằng tháng, vào giờ bạn chọn, không cần thao tác.
+- **Thông tin VHDX**: dung lượng tối đa, loại ổ đĩa, Docker có đang mở file không, và dữ liệu thật sự bên trong là bao nhiêu (để biết nén được tối đa bao nhiêu).
+- **Khởi động cùng Windows**: tự mở app (thu nhỏ) khi bạn đăng nhập, không hỏi UAC.
+- **Tự kiểm tra cập nhật**: phát hiện phiên bản mới trên GitHub Releases và cài chỉ với một cú bấm (bản đã cài).
 - **Log TXT + CSV** cho mọi lần chạy (từ GUI lẫn tác vụ định kỳ).
 - **Bộ cài** có shortcut trong Start Menu, được GitHub Actions build tự động cho mỗi Release.
 
@@ -94,7 +97,7 @@ Tải `DockerCompact-Setup-<phiên bản>.exe` ở trang **Releases** của repo
 - tuỳ chọn đăng ký lịch hằng tuần (Chủ nhật 03:00) cho user đang chạy bộ cài. Đổi lịch sau bằng nút **Lên lịch...** trong app;
 - ghi log vào `C:\ProgramData\DockerCompact\logs`.
 
-Cài im lặng cho nhiều máy: `DockerCompact-Setup-1.0.0.exe /VERYSILENT /TASKS="weeklytask"`. Khi gỡ cài đặt, tác vụ định kỳ bị xoá nhưng log được giữ lại.
+Cài im lặng cho nhiều máy: `DockerCompact-Setup-1.0.0.exe /VERYSILENT /TASKS="weeklytask"`. Khi gỡ cài đặt, tác vụ định kỳ và tác vụ "Khởi động cùng Windows" bị xoá, log được giữ lại.
 
 Tác vụ hàng tuần chạy dưới tài khoản đã đăng ký nó, và file VHDX nằm trong `%LOCALAPPDATA%` của user đó. Vì vậy trên mỗi máy, hãy đăng ký tác vụ bằng chính tài khoản dùng Docker, qua bộ cài hoặc nút **Lên lịch...** trong app.
 
@@ -184,6 +187,9 @@ Các thẻ phía trên hiển thị kích thước file VHDX, dung lượng th�
 - **Đổi...** cạnh đường dẫn VHDX dùng để chọn file `docker_data.vhdx` khác (ví dụ khi đã chuyển disk image của Docker sang ổ khác). **Dùng mặc định** quay về đường dẫn mặc định. Thẻ dung lượng trống hiển thị theo ổ chứa VHDX đã chọn.
 - **Lên lịch...** thiết lập lịch tự động: hằng ngày (mỗi N ngày), hằng tuần (mỗi N tuần, vào các ngày được chọn) hoặc hằng tháng (một ngày trong tháng, hoặc ngày cuối tháng), vào giờ bạn chọn, có thể kèm dọn dẹp. Dialog hiển thị trước lịch, ví dụ *hằng tuần vào CN lúc 03:00*. **Xoá lịch** xoá task. Lịch dùng đường dẫn VHDX đang chọn trong app.
 - **Mở thư mục log** mở thư mục log.
+- **Thông tin VHDX** (cạnh **Đổi...**) ghi chi tiết file VHDX vào khung log: kích thước file và dung lượng thật chiếm trên ổ, dung lượng tối đa và loại ổ đĩa (đọc thẳng từ header VHDX, không cần module Hyper-V), ngày tạo/sửa, Docker Desktop / WSL có đang mở file không, dung lượng trống của ổ chứa nó, và khi Docker Desktop đang chạy thì cả dữ liệu thật sự bên trong cùng mức tối đa có thể thu hồi. Nút này cũng làm mới các thẻ số liệu.
+- **Khởi động cùng Windows** (góc trên bên phải) đăng ký một tác vụ khi đăng nhập (`DockerCompact-Startup`), mở app ở dạng thu nhỏ 30 giây sau khi bạn đăng nhập. Tác vụ chạy với quyền cao nhất nên không hỏi UAC. Bỏ tick để xoá tác vụ. Mở app lần nữa khi nó đang chạy sẽ đưa cửa sổ đang có lên trước.
+- **Cập nhật**: khi mở, app kiểm tra GitHub Releases xem có phiên bản mới hơn không. Nếu có, dòng **Cập nhật lên vX.Y.Z** hiện cạnh số phiên bản; bấm vào để tải bộ cài, đối chiếu với file `.sha256`, cài im lặng rồi mở lại app. Lịch tự động của bạn được giữ nguyên. **Kiểm tra cập nhật** để kiểm tra lại bằng tay. Bản portable (không cài bằng bộ cài) chỉ mở trang tải về.
 
 ## Tác vụ hàng tuần
 

@@ -2,8 +2,9 @@
 # Windows Forms front-end for docker-compact.ps1.
 # Shows every step live (pending / running / done / skipped / failed),
 # overall + compaction progress, elapsed time, live output, before/after
-# sizes; lets you pick the VHDX, switch English / Vietnamese, and set up
-# the scheduled task (daily / weekly / monthly).
+# sizes; lets you pick the VHDX, switch English / Vietnamese, set up the
+# scheduled task (daily / weekly / monthly), show VHDX details, start with
+# Windows, and update itself from GitHub Releases.
 #
 # Launch: DockerCompact.exe (installed), DockerCompact-UI.cmd, or
 #   powershell -NoProfile -ExecutionPolicy Bypass -File DockerCompact-UI.ps1
@@ -20,7 +21,9 @@ param(
     [switch]$ShowSchedule,
     # Force a UI language for this session.
     [ValidateSet("en", "vi")]
-    [string]$Lang
+    [string]$Lang,
+    # Start minimized (used by "Start with Windows").
+    [switch]$Minimized
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,6 +60,10 @@ $app = @{
     Sub        = $null
     LastSnap   = $null
     LastBefore = $null
+    Bg         = New-Object System.Collections.ArrayList
+    InfoBusy   = $false
+    Update     = @{ State = "idle"; Version = $null; Release = $null }
+    SyncStart  = $false
 }
 
 $LangCodes = @("en", "vi")
@@ -80,9 +87,9 @@ function T([string]$Key) {
 # ------------------------------------------------------------
 if (-not (Test-IsAdministrator) -and -not $SelfTest) {
     try {
-        Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList (
-            '-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "{0}"' -f $PSCommandPath
-        ) | Out-Null
+        $relaunch = '-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "{0}"' -f $PSCommandPath
+        if ($Minimized) { $relaunch += " -Minimized" }
+        Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $relaunch | Out-Null
     }
     catch {
         [System.Windows.Forms.MessageBox]::Show(
@@ -90,6 +97,32 @@ if (-not (Test-IsAdministrator) -and -not $SelfTest) {
             "Docker VHDX Compact", "OK", "Warning") | Out-Null
     }
     exit
+}
+
+# One window at a time: a second launch (e.g. the Start Menu while the
+# "Start with Windows" copy is minimized) brings the first one forward.
+if (-not ("DockerCompact.Win" -as [type])) {
+    Add-Type -Namespace DockerCompact -Name Win -MemberDefinition @"
+[DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+"@
+}
+if (-not $SelfTest) {
+    $script:UiMutex = New-Object Threading.Mutex($false, "Local\DockerVhdxCompact.UI")
+    $owned = $false
+    try { $owned = $script:UiMutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $owned = $true }
+    if (-not $owned) {
+        $other = Get-Process -Name powershell -ErrorAction SilentlyContinue |
+            Where-Object { $_.Id -ne $PID -and $_.MainWindowTitle -like "Docker VHDX Compact*" } |
+            Select-Object -First 1
+        if ($other) {
+            $h = $other.MainWindowHandle
+            if ([DockerCompact.Win]::IsIconic($h)) { [void][DockerCompact.Win]::ShowWindowAsync($h, 9) }
+            [void][DockerCompact.Win]::SetForegroundWindow($h)
+        }
+        exit
+    }
 }
 
 if (-not ("DockerCompact.Dpi" -as [type])) {
@@ -137,6 +170,7 @@ $C = @{
     LogGreen = [Drawing.Color]::FromArgb(106, 200, 120)
     LogBlue  = [Drawing.Color]::FromArgb(110, 180, 255)
     LogAmber = [Drawing.Color]::FromArgb(220, 180, 90)
+    HeadNew  = [Drawing.Color]::FromArgb(255, 214, 102)
 }
 
 $Glyph = @{
@@ -222,6 +256,16 @@ $lblVersion.AutoSize = $true
 $lblVersion.Location = New-Object Drawing.Point((76 + $lblTitle.PreferredWidth + 2), 20)
 $header.Controls.Add($lblVersion)
 
+$lnkUpdate = New-Object Windows.Forms.LinkLabel
+$lnkUpdate.Font = $fontSub
+$lnkUpdate.AutoSize = $true
+$lnkUpdate.LinkColor = $C.HeadSub
+$lnkUpdate.ActiveLinkColor = [Drawing.Color]::White
+$lnkUpdate.VisitedLinkColor = $C.HeadSub
+$lnkUpdate.LinkBehavior = "HoverUnderline"
+$lnkUpdate.Location = New-Object Drawing.Point(($lblVersion.Left + $lblVersion.PreferredWidth + 10), 20)
+$header.Controls.Add($lnkUpdate)
+
 $lblSub = New-Object Windows.Forms.Label
 $lblSub.Font = $fontSub
 $lblSub.ForeColor = $C.HeadSub
@@ -242,15 +286,20 @@ function New-HeaderLink {
     return $l
 }
 $lnkChange = New-HeaderLink
+$lnkInfo = New-HeaderLink
 $lnkDefault = New-HeaderLink
 
+$headRight = New-Object Windows.Forms.Panel
+$headRight.Dock = "Right"
+$headRight.Width = 250
+$headRight.BackColor = $C.Accent
+
 $langPanel = New-Object Windows.Forms.FlowLayoutPanel
-$langPanel.Dock = "Right"
-$langPanel.Width = 250
+$langPanel.Location = New-Object Drawing.Point(0, 10)
+$langPanel.Size = New-Object Drawing.Size(250, 32)
 $langPanel.FlowDirection = "LeftToRight"
 $langPanel.WrapContents = $false
-$langPanel.Padding = New-Object Windows.Forms.Padding(0, 25, 0, 0)
-$langPanel.BackColor = [Drawing.Color]::Transparent
+$langPanel.BackColor = $C.Accent
 
 $lblLang = New-Object Windows.Forms.Label
 $lblLang.AutoSize = $true
@@ -265,7 +314,16 @@ $cmbLang.Width = 130
 foreach ($code in $LangCodes) { [void]$cmbLang.Items.Add([string]$Strings.$code.'lang.name') }
 $cmbLang.SelectedIndex = [array]::IndexOf($LangCodes, $app.Lang)
 $langPanel.Controls.Add($cmbLang)
-$header.Controls.Add($langPanel)
+$headRight.Controls.Add($langPanel)
+
+$chkStartup = New-Object Windows.Forms.CheckBox
+$chkStartup.AutoSize = $true
+$chkStartup.ForeColor = [Drawing.Color]::White
+$chkStartup.BackColor = $C.Accent
+$chkStartup.Font = $fontSub
+$chkStartup.Location = New-Object Drawing.Point(2, 46)
+$headRight.Controls.Add($chkStartup)
+$header.Controls.Add($headRight)
 $root.Controls.Add($header, 0, 0)
 
 # --- Stat cards ---------------------------------------------
@@ -466,6 +524,12 @@ function Format-Gib($v) {
     return ("{0:N2} GB" -f [double]$v)
 }
 
+function Format-Size($bytes) {
+    if ($null -eq $bytes) { return (T 'card.na') }
+    if ($bytes -ge 1TB) { return ("{0:N2} TB" -f ($bytes / 1TB)) }
+    return ("{0:N2} GB" -f ($bytes / 1GB))
+}
+
 function Format-Delta($v) {
     if ($null -eq $v) { return "" }
     $sign = if ($v -gt 0) { "+" } else { "" }
@@ -632,8 +696,10 @@ function Update-PathLabel {
     $lblSub.ForeColor = if ($exists) { $C.HeadSub } else { $C.HeadBad }
 
     $lnkChange.Left = $lblSub.Left + $lblSub.PreferredWidth + 12
-    $lnkDefault.Left = $lnkChange.Left + $lnkChange.PreferredWidth + 10
+    $lnkInfo.Left = $lnkChange.Left + $lnkChange.PreferredWidth + 10
+    $lnkDefault.Left = $lnkInfo.Left + $lnkInfo.PreferredWidth + 10
     $lnkDefault.Visible = ($script:DcVhdxPath -ne $script:DcVhdxDefault)
+    $lnkInfo.Enabled = $exists -and -not $app.InfoBusy -and -not $app.Process
 
     if (-not $app.Process) { $btnStart.Enabled = $exists }
     $cardFree.Title.Text = (T 'card.free' (Get-VhdxDrive)).ToUpper()
@@ -780,6 +846,8 @@ function Set-UiTexts {
     $lblLang.Text = T 'lang.label'
     $lnkChange.Text = T 'path.change'
     $lnkDefault.Text = T 'path.default'
+    $lnkInfo.Text = T 'info.link'
+    $chkStartup.Text = T 'chk.startup'
 
     $cardSize.Title.Text = (T 'card.size').ToUpper()
     $cardOnDisk.Title.Text = (T 'card.ondisk').ToUpper()
@@ -806,6 +874,7 @@ function Set-UiTexts {
     Update-PathLabel
     Show-Status
     Show-Sub
+    Show-UpdateLink
 
     $form.ResumeLayout($true)
 }
@@ -832,6 +901,9 @@ function Set-Busy([bool]$Busy) {
     $btnClose.Enabled = -not $Busy
     $lnkChange.Enabled = -not $Busy
     $lnkDefault.Enabled = -not $Busy
+    $lnkInfo.Enabled = (-not $Busy) -and (-not $app.InfoBusy) -and (Test-Path -LiteralPath $script:DcVhdxPath -PathType Leaf)
+    $chkStartup.Enabled = -not $Busy
+    $lnkUpdate.Enabled = -not $Busy
     $btnStart.BackColor = if ($Busy) { [Drawing.Color]::FromArgb(150, 170, 210) } else { $C.Accent }
 }
 
@@ -1309,6 +1381,310 @@ function Show-ScheduleDialog {
 
 
 # ------------------------------------------------------------
+# Background work (VHDX info, update check, download) polled on the
+# UI thread, like the engine output.
+# ------------------------------------------------------------
+$bgTimer = New-Object Windows.Forms.Timer
+$bgTimer.Interval = 200
+$bgTimer.add_Tick({
+    foreach ($job in @($app.Bg)) {
+        if (-not $job.Async.IsCompleted) { continue }
+        $app.Bg.Remove($job)
+        try { & $job.Done $job }
+        catch { Add-Log "UI error: $($_.Exception.Message)" $C.LogRed }
+    }
+    if ($app.Bg.Count -eq 0) { $bgTimer.Stop() }
+})
+
+# $Async: anything with IsCompleted (Task, IAsyncResult).
+# $Done: name of a function that receives the job hashtable.
+function Add-BgJob {
+    param($Async, [string]$Done, [hashtable]$Data = @{})
+    [void]$app.Bg.Add(@{ Async = $Async; Done = $Done; Data = $Data })
+    $bgTimer.Start()
+}
+
+
+# ------------------------------------------------------------
+# VHDX info
+# ------------------------------------------------------------
+function Write-VhdxInfo($i) {
+    $rows = New-Object System.Collections.Generic.List[object]
+    $rows.Add(@((T 'info.file'), $i.Path, $null))
+    $rows.Add(@((T 'info.size'), (T 'info.sizeValue' (Format-Size $i.FileSize) (Format-Size $i.OnDisk)), $null))
+    if ($i.VirtualSize) {
+        $max = Format-Size $i.VirtualSize
+        if ($i.Type) { $max += ", " + (T "info.type.$($i.Type)") }
+        $rows.Add(@((T 'info.max'), $max, $null))
+    }
+    if ($i.Created) { $rows.Add(@((T 'info.created'), $i.Created.ToString("yyyy-MM-dd HH:mm:ss"), $null)) }
+    if ($i.Modified) { $rows.Add(@((T 'info.modified'), $i.Modified.ToString("yyyy-MM-dd HH:mm:ss"), $null)) }
+    if ($i.InUse) { $rows.Add(@((T 'info.inUse'), (T 'info.inUseYes'), $C.LogAmber)) }
+    else { $rows.Add(@((T 'info.inUse'), (T 'info.inUseNo'), $null)) }
+
+    if ($null -ne $i.UsedInside) {
+        $gain = [math]::Max(0, [double]$i.OnDisk - [double]$i.UsedInside)
+        $rows.Add(@((T 'info.inside'), (T 'info.insideValue' (Format-Size $i.UsedInside) (Format-Size $gain)), $C.LogGreen))
+    }
+    elseif ($i.DockerRunning) { $rows.Add(@((T 'info.inside'), (T 'info.insideFailed'), $C.LogAmber)) }
+    else { $rows.Add(@((T 'info.inside'), (T 'info.insideNoDocker'), $C.LogAmber)) }
+    $rows.Add(@((T 'info.free' $i.Drive), (Format-Size $i.DriveFree), $null))
+
+    $width = ($rows | ForEach-Object { $_[0].Length } | Measure-Object -Maximum).Maximum
+    Add-Log ""
+    Add-Log ("== {0} ==" -f (T 'info.title')) $C.LogBlue
+    foreach ($r in $rows) { Add-Log ("{0}  {1}" -f $r[0].PadRight($width), $r[1]) $r[2] }
+}
+
+function Start-VhdxInfo {
+    if ($app.InfoBusy -or $app.Process) { return }
+    if (-not (Test-Path -LiteralPath $script:DcVhdxPath -PathType Leaf)) {
+        Add-Log (T 'path.notFound' $script:DcVhdxPath) $C.LogRed
+        return
+    }
+    $app.InfoBusy = $true
+    $lnkInfo.Enabled = $false
+    Add-Log (T 'info.loading') $C.LogDim
+
+    # A separate runspace: reading the disk and asking WSL can take a moment.
+    $ps = [powershell]::Create()
+    [void]$ps.AddScript('param($common, $path) . $common; Get-VhdxInfo -Path $path')
+    [void]$ps.AddArgument((Join-Path $script:DcRoot "DockerCompact-Common.ps1"))
+    [void]$ps.AddArgument($script:DcVhdxPath)
+    Add-BgJob $ps.BeginInvoke() 'Complete-VhdxInfo' @{ Ps = $ps }
+}
+
+function Complete-VhdxInfo($job) {
+    $ps = $job.Data.Ps
+    try {
+        $out = $ps.EndInvoke($job.Async)
+        if ($out.Count -and $out[0]) { Write-VhdxInfo $out[0] }
+        elseif ($ps.Streams.Error.Count) { Add-Log (T 'info.failed' $ps.Streams.Error[0].ToString()) $C.LogRed }
+    }
+    catch { Add-Log (T 'info.failed' $_.Exception.Message) $C.LogRed }
+    finally {
+        $ps.Dispose()
+        $app.InfoBusy = $false
+        $lnkInfo.Enabled = (-not $app.Process) -and (Test-Path -LiteralPath $script:DcVhdxPath -PathType Leaf)
+    }
+    if (-not $app.Process) { Update-Stats (Get-DiskSnapshot) }
+}
+
+
+# ------------------------------------------------------------
+# Start with Windows
+# ------------------------------------------------------------
+function Sync-StartupBox {
+    $app.SyncStart = $true
+    $chkStartup.Checked = [bool](Get-DcStartupTask)
+    $app.SyncStart = $false
+}
+
+$chkStartup.add_CheckedChanged({
+    if ($app.SyncStart) { return }
+    $want = $chkStartup.Checked
+    try {
+        Set-DcStartup -Enabled $want
+        Add-Log (T $(if ($want) { 'startup.on' } else { 'startup.off' })) $C.LogBlue
+    }
+    catch {
+        Add-Log (T 'startup.failed' $_.Exception.Message) $C.LogRed
+    }
+    Sync-StartupBox
+})
+
+
+# ------------------------------------------------------------
+# Updates from GitHub Releases
+# ------------------------------------------------------------
+Add-Type -AssemblyName System.Net.Http
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+$script:Http = $null
+
+function Get-Http {
+    if (-not $script:Http) {
+        $h = New-Object Net.Http.HttpClient
+        $h.Timeout = [TimeSpan]::FromMinutes(10)
+        $ver = if ($script:DcVersion) { $script:DcVersion } else { "dev" }
+        $h.DefaultRequestHeaders.UserAgent.ParseAdd("DockerVhdxCompact/$ver")
+        $script:Http = $h
+    }
+    return $script:Http
+}
+
+function Show-UpdateLink {
+    $u = $app.Update
+    $lnkUpdate.LinkColor = $C.HeadSub
+    $lnkUpdate.Font = $fontSub
+    switch ($u.State) {
+        "checking"    { $lnkUpdate.Text = T 'upd.checking' }
+        "latest"      { $lnkUpdate.Text = T 'upd.latest' }
+        "downloading" { $lnkUpdate.Text = T 'upd.downloading' $u.Version }
+        "available"   {
+            $lnkUpdate.Text = T 'upd.available' $u.Version
+            $lnkUpdate.LinkColor = $C.HeadNew
+            $lnkUpdate.Font = New-Object Drawing.Font("Segoe UI Semibold", 9)
+        }
+        default       { $lnkUpdate.Text = T 'upd.check' }
+    }
+}
+
+function Set-UpdateState([string]$State) {
+    $app.Update.State = $State
+    Show-UpdateLink
+}
+
+function Start-UpdateCheck([bool]$Manual = $false) {
+    if ($app.Update.State -in @("checking", "downloading")) { return }
+    Set-UpdateState "checking"
+    try {
+        $req = New-Object Net.Http.HttpRequestMessage(
+            [Net.Http.HttpMethod]::Get, "https://api.github.com/repos/$script:DcRepo/releases?per_page=30")
+        $req.Headers.Accept.ParseAdd("application/vnd.github+json")
+        Add-BgJob ((Get-Http).SendAsync($req)) 'Complete-UpdateCheck' @{ Manual = $Manual }
+    }
+    catch { Complete-UpdateCheck @{ Async = $null; Data = @{ Manual = $Manual }; Error = $_.Exception.Message } }
+}
+
+function Get-TaskError($task) {
+    if (-not $task) { return "?" }
+    $e = $task.Exception
+    while ($e -and $e.InnerException) { $e = $e.InnerException }
+    if ($e) { return $e.Message }
+    return "cancelled"
+}
+
+# Highest version among published releases. GitHub's "latest" flag can be
+# set by hand on any release, so it is not used.
+function Select-NewestRelease($list) {
+    $best = $null
+    foreach ($r in @($list)) {
+        if ($r.draft -or $r.prerelease) { continue }
+        $v = $null
+        if (-not [version]::TryParse(([string]$r.tag_name -replace '^v', ''), [ref]$v)) { continue }
+        if (-not $best -or $v -gt $best.Version) { $best = @{ Version = $v; Data = $r } }
+    }
+    if (-not $best) { return $null }
+    $best.Data | Add-Member -NotePropertyName Version -NotePropertyValue $best.Version -Force
+    return $best.Data
+}
+
+function Complete-UpdateCheck($job) {
+    $manual = [bool]$job.Data.Manual
+    $err = $job.Error
+    $rel = $null
+    $t = $job.Async
+    if (-not $err) {
+        if ($t.IsFaulted -or $t.IsCanceled) { $err = Get-TaskError $t }
+        else {
+            $resp = $t.Result
+            if (-not $resp.IsSuccessStatusCode) { $err = "HTTP $([int]$resp.StatusCode) $($resp.ReasonPhrase)" }
+            else { $rel = Select-NewestRelease ($resp.Content.ReadAsStringAsync().Result | ConvertFrom-Json) }
+        }
+    }
+
+    if ($err) {
+        Set-UpdateState "idle"
+        if ($manual) { [Windows.Forms.MessageBox]::Show((T 'upd.failed' $err), "Docker VHDX Compact", "OK", "Warning") | Out-Null }
+        else { Add-Log (T 'upd.failed' $err) $C.LogDim }
+        return
+    }
+
+    $current = [version]"0.0.0"
+    [void][version]::TryParse($script:DcVersion, [ref]$current)
+    $latest = if ($rel) { $rel.Version } else { $null }
+
+    if ($latest -and $latest -gt $current) {
+        $app.Update.Version = $latest.ToString()
+        $app.Update.Release = $rel
+        Set-UpdateState "available"
+        Add-Log (T 'upd.logAvailable' $app.Update.Version $script:DcVersion) $C.LogAmber
+        if ($manual) { Invoke-Update }
+    }
+    else {
+        Set-UpdateState "latest"
+        if ($manual) {
+            [Windows.Forms.MessageBox]::Show((T 'upd.latestMsg' $script:DcVersion), "Docker VHDX Compact", "OK", "Information") | Out-Null
+        }
+    }
+}
+
+function Invoke-Update {
+    $u = $app.Update
+    if ($app.Process) {
+        [Windows.Forms.MessageBox]::Show((T 'upd.busy'), "Docker VHDX Compact", "OK", "Warning") | Out-Null
+        return
+    }
+    $rel = $u.Release
+    $ver = $u.Version
+    $exeAsset = $rel.assets | Where-Object { $_.name -eq "DockerCompact-Setup-$ver.exe" } | Select-Object -First 1
+    $shaAsset = $rel.assets | Where-Object { $_.name -eq "DockerCompact-Setup-$ver.exe.sha256" } | Select-Object -First 1
+
+    if (-not $script:DcIsInstalled) {
+        $a = [Windows.Forms.MessageBox]::Show((T 'upd.portable' $ver $script:DcVersion), "Docker VHDX Compact", "YesNo", "Information")
+        if ($a -eq "Yes") { Start-Process $rel.html_url }
+        return
+    }
+    if (-not $exeAsset -or -not $shaAsset) {
+        $a = [Windows.Forms.MessageBox]::Show((T 'upd.noAsset' $ver), "Docker VHDX Compact", "YesNo", "Information")
+        if ($a -eq "Yes") { Start-Process $rel.html_url }
+        return
+    }
+
+    $a = [Windows.Forms.MessageBox]::Show((T 'upd.confirm' $ver $script:DcVersion), "Docker VHDX Compact", "YesNo", "Question")
+    if ($a -ne "Yes") { return }
+
+    Set-UpdateState "downloading"
+    Add-Log (T 'upd.downloading' $ver) $C.LogBlue
+    $http = Get-Http
+    $exeTask = $http.GetByteArrayAsync([string]$exeAsset.browser_download_url)
+    $shaTask = $http.GetStringAsync([string]$shaAsset.browser_download_url)
+    $all = [Threading.Tasks.Task]::WhenAll([Threading.Tasks.Task[]]@($exeTask, $shaTask))
+    Add-BgJob $all 'Complete-UpdateDownload' @{ Exe = $exeTask; Sha = $shaTask; Name = [string]$exeAsset.name; Version = $ver }
+}
+
+function Complete-UpdateDownload($job) {
+    $d = $job.Data
+    if ($job.Async.IsFaulted -or $job.Async.IsCanceled) {
+        Set-UpdateState "available"
+        $msg = T 'upd.dlFailed' (Get-TaskError $job.Async)
+        Add-Log $msg $C.LogRed
+        [Windows.Forms.MessageBox]::Show($msg, "Docker VHDX Compact", "OK", "Warning") | Out-Null
+        return
+    }
+
+    $bytes = $d.Exe.Result
+    $expected = (([string]$d.Sha.Result).Trim() -split '\s+')[0]
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $actual = -join ($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") })
+    $sha.Dispose()
+    if ($actual -ne $expected.ToLowerInvariant()) {
+        Set-UpdateState "available"
+        Add-Log (T 'upd.badHash') $C.LogRed
+        [Windows.Forms.MessageBox]::Show((T 'upd.badHash'), "Docker VHDX Compact", "OK", "Error") | Out-Null
+        return
+    }
+
+    $dir = Join-Path $env:TEMP "DockerCompact-Update"
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    $setup = Join-Path $dir $d.Name
+    [IO.File]::WriteAllBytes($setup, $bytes)
+
+    Add-Log (T 'upd.installing' $d.Version) $C.LogBlue
+    # /RELAUNCH=1 opens the app again when the installer finishes; the
+    # weekly-task choice is left out so a custom schedule is not replaced.
+    Start-Process -FilePath $setup -ArgumentList '/SILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH=1 /MERGETASKS="!weeklytask,!weeklytask\prune"'
+    $form.Close()
+}
+
+$lnkUpdate.add_LinkClicked({
+    if ($app.Update.State -eq "available") { Invoke-Update }
+    elseif ($app.Update.State -ne "downloading") { Start-UpdateCheck $true }
+})
+$lnkInfo.add_LinkClicked({ Start-VhdxInfo })
+
+
+# ------------------------------------------------------------
 # Buttons / links
 # ------------------------------------------------------------
 $btnStart.add_Click({ Start-Compaction })
@@ -1350,6 +1726,7 @@ $form.add_Shown({
     $split.SplitterDistance = [int]($split.Width * 0.55)
     $lv.Columns[4].Width = -2
     Update-PathLabel
+    if (-not $SelfTest) { Start-UpdateCheck }
 })
 
 
@@ -1359,6 +1736,7 @@ $form.add_Shown({
 Reset-Steps
 Update-Stats (Get-DiskSnapshot)
 Set-Status 'status.ready'
+Sync-StartupBox
 Set-UiTexts
 Add-Log (T 'log.ready')
 Add-Log (T 'log.engine' $script:DcEnginePath)
@@ -1413,6 +1791,14 @@ if ($SelfTest) {
     Write-Output "SELFTEST preview monthly: $p2"
     Write-Output "SELFTEST preview weekly:  $p1"
 
+    $info = Get-VhdxInfo
+    Write-VhdxInfo $info
+    Write-Output ("SELFTEST info: max={0} type={1} inUse={2} docker={3}" -f (Format-Size $info.VirtualSize), $info.Type, $info.InUse, $info.DockerRunning)
+    Write-Output "SELFTEST startup task: $([bool](Get-DcStartupTask)) installed: $script:DcIsInstalled"
+    $app.Update.Version = "9.9.9"
+    Set-UpdateState "available"
+    Write-Output "SELFTEST update link: $($lnkUpdate.Text)"
+
     if ($Screenshot) {
         $form.Show()
         $split.SplitterDistance = [int]($split.Width * 0.55)
@@ -1434,6 +1820,9 @@ if ($SelfTest) {
     exit 0
 }
 
+if ($Minimized) { $form.WindowState = "Minimized" }
 [void]$form.ShowDialog()
 $timer.Dispose()
+$bgTimer.Dispose()
+if ($script:Http) { $script:Http.Dispose() }
 $form.Dispose()

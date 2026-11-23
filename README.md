@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=1d63ed"></a>
+  <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TokisakiNinoVn/Docker-VHDX-Compact?sort=semver&style=flat-square&color=1d63ed"></a>
   <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/TokisakiNinoVn/Docker-VHDX-Compact/release.yml?style=flat-square&label=build"></a>
   <a href="https://github.com/TokisakiNinoVn/Docker-VHDX-Compact/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/TokisakiNinoVn/Docker-VHDX-Compact/total?style=flat-square&color=2ea44f"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/TokisakiNinoVn/Docker-VHDX-Compact?style=flat-square&color=blue"></a>
@@ -44,6 +44,9 @@ Docker Desktop's WSL2 disk (`docker_data.vhdx`) grows as you pull images and bui
 - **English / Vietnamese** interface, switchable in the top-right corner.
 - **Custom VHDX path** for when Docker's disk is not in the default location.
 - **Scheduled task**: daily, weekly or monthly, at the time you choose, unattended.
+- **VHDX info**: maximum size, disk type, whether Docker has it open, and how much data is really inside (so you know what compaction can reclaim).
+- **Start with Windows**: opens the app minimized when you sign in, without a UAC prompt.
+- **Automatic update check**: finds new versions on GitHub Releases and installs them in one click (installed copy).
 - **TXT + CSV logs** for every run (GUI and task).
 - **Installer** with Start Menu shortcuts, built by GitHub Actions for each Release.
 
@@ -94,7 +97,7 @@ Download `DockerCompact-Setup-<version>.exe` from the repository's **Releases** 
 - optionally registers a weekly task (Sunday 03:00) for the user running the setup. Change it later with **Schedule...** in the app;
 - writes logs to `C:\ProgramData\DockerCompact\logs`.
 
-Silent install for many machines: `DockerCompact-Setup-1.0.0.exe /VERYSILENT /TASKS="weeklytask"`. Uninstalling removes the scheduled task and keeps the logs.
+Silent install for many machines: `DockerCompact-Setup-1.0.0.exe /VERYSILENT /TASKS="weeklytask"`. Uninstalling removes the scheduled task and the "Start with Windows" task, and keeps the logs.
 
 The weekly task runs as the account that registered it, and the VHDX lives in that user's `%LOCALAPPDATA%`. So on each machine, register the task as the person who uses Docker, from the setup program or with the app's **Schedule...** button.
 
@@ -184,6 +187,9 @@ The cards at the top show the VHDX file size, the space it actually uses on disk
 - **Change...** next to the VHDX path picks another `docker_data.vhdx` (for example when Docker's disk image location was moved to another drive). **Use default** goes back to the default path. The free-space card follows the drive of the chosen VHDX.
 - **Schedule...** sets up the scheduled task: daily (every N days), weekly (every N weeks, on chosen days) or monthly (a day of the month, or the last day), at the time you pick, optionally with prune. It shows a preview such as *every week on Sun at 03:00*, and **Remove schedule** deletes the task. The task uses the VHDX path selected in the app.
 - **Open logs** opens the `logs` folder.
+- **VHDX info** (next to **Change...**) writes the VHDX details to the log panel: file size and real space used on the host, maximum size and type (read from the VHDX header, no Hyper-V module needed), created/modified dates, whether Docker Desktop / WSL has the file open, free space on its drive and, while Docker Desktop is running, how much data the disk really holds and the most compaction can reclaim. It also refreshes the cards.
+- **Start with Windows** (top right) registers a logon task (`DockerCompact-Startup`) that opens the app minimized 30 seconds after you sign in. It runs with highest privileges, so there is no UAC prompt. Untick it to remove the task. Opening the app again while it is already running brings the existing window to the front.
+- **Updates**: at startup the app checks GitHub Releases for a newer version. When one exists, **Update to vX.Y.Z** appears next to the version number; click it to download the installer, verify it against its `.sha256` file, install it silently and reopen the app. Your scheduled task is kept as it is. **Check for updates** checks again by hand. A portable copy (not installed with the setup program) only opens the download page.
 
 ## Weekly scheduled task
 
