@@ -62,6 +62,12 @@ if ($LASTEXITCODE -ne 0) { throw "csc failed with exit code $LASTEXITCODE" }
 Remove-Item -LiteralPath $versionCs -Force -ErrorAction SilentlyContinue
 Write-Host "Built $exe"
 
+# The installer ships this file, so the app always reports the version it
+# was built as (e.g. the Release tag), even if the repo's VERSION differs.
+$versionFile = Join-Path $dist "VERSION"
+[IO.File]::WriteAllText($versionFile, "$Version`r`n", (New-Object Text.UTF8Encoding($false)))
+Write-Host "Wrote $versionFile ($Version)"
+
 if ($SkipInstaller) { return }
 
 # --- 3. Installer --------------------------------------------------------

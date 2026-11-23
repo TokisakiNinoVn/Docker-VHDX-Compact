@@ -60,7 +60,7 @@ Source: "..\dist\DockerCompact.exe";                DestDir: "{app}"; Flags: ign
 Source: "..\assets\images\icon-no-background.ico"; DestDir: "{app}"; DestName: "DockerCompact.ico"; Flags: ignoreversion
 Source: "..\DockerCompact-UI.ps1";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DockerCompact-Lang.json";               DestDir: "{app}"; Flags: ignoreversion
-Source: "..\VERSION";                              DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\VERSION";                         DestDir: "{app}"; Flags: ignoreversion
 Source: "..\docker-compact.ps1";                    DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DockerCompact-AutoSetup.ps1";           DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DockerCompact-Common.ps1";              DestDir: "{app}"; Flags: ignoreversion
